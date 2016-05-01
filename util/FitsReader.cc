@@ -226,6 +226,7 @@ int FitsReader::moveForwardToTable(std::string extspec)
   }
 
   ThrowError("Table: " << extspec << " not found");
+  return 0;
 }
 
 /**.......................................................................
@@ -268,6 +269,7 @@ int FitsReader::moveToNextTable()
   }
 
   ThrowError("No more tables found");
+  return 0;
 }
 
 std::string FitsReader::getKeyword(std::string extname, std::string keyword)

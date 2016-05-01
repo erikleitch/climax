@@ -1448,10 +1448,10 @@ double Generic2DAngularModel::getComptonYScaleFactor(Frequency& freq)
     else if(units == "Jy")
       return 1.0/normIntensityConv_.JyPerSr();
 
-  } else {
-    ThrowSimpleColorError("Unrecognized units: " << units << " for normalization of model " << name_, "red");
-    return 0;
   }
+
+  ThrowSimpleColorError("Unrecognized units: " << units << " for normalization of model " << name_, "red");
+  return 0.0;
 }
 
 PgModel Generic2DAngularModel::pgModel()

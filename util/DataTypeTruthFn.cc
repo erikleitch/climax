@@ -223,6 +223,9 @@ std::string DataTypeTruthFn::formatOp(DATATYPE_TRUTH_FN1(*fn_))
 
   else if(fn_ == lessThanEq)
     return "<=";
+
+  else
+      return "";
 }
 
 std::string DataTypeTruthFn::formatOp1(DATATYPE_TRUTH_FN2(*fn_))

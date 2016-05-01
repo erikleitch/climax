@@ -48,7 +48,7 @@ void ClusterModel::initialize()
 /**.......................................................................
  * Initialize the conversion from Pressure to ComptonY
  */
-double ClusterModel::initializePressureToComptonYScaleFactor()
+void ClusterModel::initializePressureToComptonYScaleFactor()
 {
   Energy restMassEnergy;
   restMassEnergy = Constants::electronMass_;
@@ -73,8 +73,6 @@ double ClusterModel::initializePressureToComptonYScaleFactor()
   } else if(units == "erg/cm^3") {
     pressureToComptonYScaleFactor_ = 1.0/press.ergPerCm3();
   }
-
-  COUT("Pressure scale factor is now: " <<     pressureToComptonYScaleFactor_);
 
   pressureToComptonYScaleFactorNeedsInitializing_ = false;
 }

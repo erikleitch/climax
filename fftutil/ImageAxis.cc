@@ -52,6 +52,7 @@ unsigned ImageAxis::getNpix()
     return n_;
   } else {
     ThrowError("Number of pixels isn't specified for this axis: use setNpix()");
+    return n_;
   }
 }
 
@@ -93,6 +94,7 @@ Angle& ImageAxis::getAngularSize()
     return size_;
   } else {
     ThrowError("No size is specified for this axis: use setAngularSize()");
+    return size_;
   }
 }
 
@@ -135,6 +137,7 @@ Angle& ImageAxis::getAngularResolution()
     return resolution_;
   } else {
     ThrowError("Not enough information to calculate the angular resolution of this axis");
+    return resolution_;
   }
 }
 

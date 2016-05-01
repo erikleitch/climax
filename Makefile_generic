@@ -136,7 +136,6 @@ $(BIN_EXE_PREFIX)%.pyso: $(BIN_PREFIX)%.cc
 # Rule for making .o files from .cc files
 
 %.o: %.cc
-	echo "python path is " $(PYTHON_INC_PATH)
 	$(CC) $(CCFLAGS) $(CCINC) -DHOST="\"$(HOSTNAME)\"" -DNAMESERVER="\"$(HOSTNAME):4000\"" -DEVENTSERVER="\"$(HOSTNAME):4001\"" -DCALFILE="\"$(SZA)/array/conf/cal\"" -c -o $@ $<
 
 %.o: %.c

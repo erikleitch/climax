@@ -33,25 +33,6 @@ CoProc::CoProc(std::string exe)
 /**.......................................................................
  * Constructor.
  */
-CoProc::CoProc(char *exe)
-{
-  std::vector<std::string> args = split(exe);
-
-  std::vector<char*> argv;
-  argv.resize(args.size()+1);
-
-  unsigned i;
-  for(i=0; i < args.size(); i++) {
-    argv[i] = &args[i][0];
-  }
-  argv[i] = 0;
-
-  fork(argv[0], &argv[0], 0, 0, 0);
-}
-
-/**.......................................................................
- * Constructor.
- */
 CoProc::CoProc(char *exe, FILE** stdInFp, FILE** stdOutFp, FILE** stdErrFp) 
 {
   std::vector<std::string> args = split(exe);

@@ -880,6 +880,7 @@ void* DataType::data()
     break;
   default:
     ThrowError("No data type specified");
+    return 0;
     break;
   }
 }
@@ -1046,6 +1047,7 @@ double DataType::getValAsDouble()
     break;
   default:
     ThrowError("Invalid Data type conversion");
+    return 0.0;
     break;
   }
 }

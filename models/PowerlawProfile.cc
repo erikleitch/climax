@@ -146,13 +146,14 @@ double PowerlawProfile::radialModel(unsigned type, double x, void* params)
     break;
   default:
     ThrowColorError("Unsupported dataset type: " << type, "red");
+    return 0.0;
     break;
   }
 }
 
 double PowerlawProfile::radialRadioModelEml(double x, void* params)
 {
-  unsigned iLow, iHigh;
+  unsigned iLow=0, iHigh=0;
   binSearchForRadius(x, iLow, iHigh);
   return piecewiseNorm_[iLow] * profileFn(x, alpha_[iLow].val_, beta_[iLow].val_);
 }
@@ -160,6 +161,7 @@ double PowerlawProfile::radialRadioModelEml(double x, void* params)
 double PowerlawProfile::radialXrayModel(double x, void* params)
 {
   ThrowSimpleColorError("No radialXrayModel() function has been defined for this model", "red");
+  return 0.0;
 }
 
 /**.......................................................................

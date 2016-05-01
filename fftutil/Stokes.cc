@@ -29,5 +29,7 @@ gcp::util::operator<<(std::ostream& os, const Stokes::Param& param)
     os << "STOKES UNKNOWN";
     break;
   }
+
+  return os;
 }
 

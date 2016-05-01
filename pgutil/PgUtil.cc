@@ -275,7 +275,7 @@ void PgUtil::greyScale(int ndata, float *zdata, int nx,int ny,
 int PgUtil::v_grey2(int ndata, float *zdata, int nx,int ny, 
 		    float xmina, float xmaxa, float ymina, float ymaxa, 
 		    float *flag,float z1, float z2, 
-		    char *xlab, char *ylab, char *title, char *unit)
+		    std::string xlab, std::string ylab, std::string title, std::string unit)
 {
   PgModelManager modelManager = pgManager_;
 
@@ -816,9 +816,9 @@ int PgUtil::v_grey2(int ndata, float *zdata, int nx,int ny,
 	  if(coordCallback_) {
 	    std::string xstr, ystr;
 	    (*coordCallback_)(xpos[0], ypos[0], xstr, ystr, coordCallbackArgs_);
-	    fprintf(stdout,"Pixel value at (%s, %s) is %f %s\n", xstr.c_str(), ystr.c_str(), val, unit);
+	    fprintf(stdout,"Pixel value at (%s, %s) is %f %s\n", xstr.c_str(), ystr.c_str(), val, unit.c_str());
 	  } else {
-	    fprintf(stdout,"Pixel value at (%lf, %lf) is %f %s\n", xmin, ymin, val, unit);
+              fprintf(stdout,"Pixel value at (%lf, %lf) is %f %s\n", xmin, ymin, val, unit.c_str());
 	  }
 
 	}
@@ -973,7 +973,7 @@ int PgUtil::v_grey2(int ndata, float *zdata, int nx,int ny,
      * Draw a Wedge on the side.
      */
     if(wedge_)
-      cpgwedg("RI",0,4,zmax,zmin,unit);
+      cpgwedg("RI",0,4,zmax,zmin,unit.c_str());
 
     // Draw a header if using a header
 
@@ -3229,7 +3229,7 @@ void PgUtil::histogram(unsigned ndata, float* data, unsigned nbin, std::vector<u
     if(!waserr) {
       for(i=0;i < ndata;i++) {
 
-	if(!finite(data[i])) {
+        if(!isfinite(data[i])) {
 	  ThrowColorError("\nData not finite", "red");
 	}
 
@@ -3289,7 +3289,7 @@ void PgUtil::histogram2D(unsigned ndata, float* data1, float* data2, unsigned nb
 
       for(i=0; i < ndata; i++) {
 
-	if(!finite(data1[i]) || !finite(data2[i])) {
+	if(!isfinite(data1[i]) || !isfinite(data2[i])) {
 	  ThrowColorError("\nData not finite", "red");
 	}
 

@@ -632,7 +632,7 @@ namespace gcp {
 	unsigned minOrder;
 	
 	for(int ithread=0; ithread < threads_.size(); ithread++) {
-	  if(threads_[ithread]->isRunning())
+	  if(threads_[ithread]->isRunning()) {
 	    
 	    if(first) {
 	      minOrder = threads_[ithread]->cancelOrder();
@@ -641,7 +641,8 @@ namespace gcp {
 	      minOrder = threads_[ithread]->cancelOrder() < minOrder ? 
 		threads_[ithread]->cancelOrder() : minOrder;
 	    }
-	  
+
+          }
 	}
 	
 	return minOrder;
@@ -721,6 +722,7 @@ namespace gcp {
 	}
 	
 	ThrowError("No matching thread found");
+        return threads_[0];
       };
     
     

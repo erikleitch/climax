@@ -6963,6 +6963,7 @@ VisDataSet::VisFreqData& VisDataSet::findMatch(VisBaselineGroup& groupMatch, Vis
   } // End iteration over groups
 
   ThrowError("No match found for group " << groupMatch << " stokes " << stokesMatch << " freq " << freqMatch);
+  return baselineGroups_[0].stokesData_[0].freqData_[0]; // Just so the compiler doesn't complain.
 }
 
 /**.......................................................................

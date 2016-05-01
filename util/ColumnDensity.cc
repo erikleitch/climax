@@ -17,7 +17,7 @@ ColumnDensity::~ColumnDensity() {}
 void ColumnDensity::setInverseSquaredCentimeters(double cm2)
 {
   val_ = cm2;
-  finite_ = finite(cm2);
+  finite_ = isfinite(cm2);
 }
 
 void ColumnDensity::setInverseSquaredMeters(double m2)

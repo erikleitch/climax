@@ -1,6 +1,7 @@
 #ifndef SLAMACHDEF
 #define SLAMACHDEF
 
+extern "C" {
 /*
 **  - - - - - - - - -
 **   s l a m a c . h
@@ -96,5 +97,5 @@
 
 /* 15/(2pi):  hours to degrees x radians to turns */
 #define D15B2P 2.3873241463784300365332564505877154305168946861068
-
+}
 #endif

@@ -35,6 +35,7 @@ bool CarmaConfig::isOccupied(unsigned padNumber, unsigned configFlag)
   }
 
   ThrowError("No pad number: " << padNumber << " found");
+  return false;
 }
 
 /**.......................................................................
@@ -818,6 +819,7 @@ CarmaConfig::PadLocation CarmaConfig::getPadByNumber(unsigned padNumber)
   }
 
   ThrowError("Invalid pad number: " << padNumber);
+  return padLocations_[0];
 }
 
 void CarmaConfig::initializeCurrentConfiguration()

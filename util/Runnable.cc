@@ -85,6 +85,8 @@ THREAD_START(Runnable::startUp)
   runnable->spawnedThread_->broadcastReady();
 
   runnable->runFn_(arg);
+
+  return 0;
 }
 
 void Runnable::spawn(void* arg)

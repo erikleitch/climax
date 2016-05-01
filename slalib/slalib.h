@@ -2,6 +2,7 @@
 #define SLALIBHDEF
 #include <math.h>
 
+extern "C" {
 /*
 **  - - - - - - - - -
 **   s l a l i b . h
@@ -419,5 +420,5 @@ double slaZd ( double ha, double dec, double phi );
 double slaPav ( float v1 [ 3 ], float v2 [ 3 ] );
 
 double slaDpav ( double v1 [ 3 ], double v2 [ 3 ] );
-
+}
 #endif

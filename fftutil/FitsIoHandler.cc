@@ -831,12 +831,12 @@ void FitsIoHandler::writeVisibilityDataBody(FILE* fp)
 	  // it.  In this case, flag the visibility.
 	  //------------------------------------------------------------
 	  
-	  if(!finite(fltbuf[0]) || !finite(fltbuf[1]) || !finite(fltbuf[2])) {
+	  if(!isfinite(fltbuf[0]) || !isfinite(fltbuf[1]) || !isfinite(fltbuf[2])) {
 	   
-	    if(!finite(fltbuf[0]) || !finite(fltbuf[1])) {
+	    if(!isfinite(fltbuf[0]) || !isfinite(fltbuf[1])) {
 	      fltbuf[0] = fltbuf[1] = 0.0;
 	      badData++;
-	    } if(!finite(fltbuf[2])) {
+	    } if(!isfinite(fltbuf[2])) {
 	      badWtData++;
 	    }
 
@@ -954,12 +954,12 @@ void FitsIoHandler::writeVisibilityDataBody(ObsInfo& obs)
 	  // bad, and we've done an amplitude calibration with
 	  // it.  In this case, flag the visibility.
 	  
-	  if(!finite(fltbuf[0]) || !finite(fltbuf[1]) || !finite(fltbuf[2])) {
+	  if(!isfinite(fltbuf[0]) || !isfinite(fltbuf[1]) || !isfinite(fltbuf[2])) {
 	   
-	    if(!finite(fltbuf[0]) || !finite(fltbuf[1])) {
+	    if(!isfinite(fltbuf[0]) || !isfinite(fltbuf[1])) {
 	      fltbuf[0] = fltbuf[1] = 0.0;
 	      badData++;
-	    } if(!finite(fltbuf[2])) {
+	    } if(!isfinite(fltbuf[2])) {
 	      badWtData++;
 	    }
 
@@ -1070,7 +1070,7 @@ void FitsIoHandler::writeFakeVisibilityDataBody(double* vis, double* date, doubl
 	  // bad, and we've done an amplitude calibration with
 	  // it.  In this case, flag the visibility.
 	  
-	  if(!finite(fltbuf[0]) || !finite(fltbuf[1]) || !finite(fltbuf[2])) {
+	  if(!isfinite(fltbuf[0]) || !isfinite(fltbuf[1]) || !isfinite(fltbuf[2])) {
 	    fltbuf[0] =  1.0;
 	    fltbuf[1] =  0.0;
 	    fltbuf[2] = -1.0;

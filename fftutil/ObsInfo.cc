@@ -201,7 +201,7 @@ void ObsInfo::setAntennaX(Length X, unsigned index)
     ThrowError("The number of antennas is currently unknown.  Use setNumberOfAntennas()");
   }
 
-  if(index < 0 || index > antennas_.size()-1) {
+  if(index > antennas_.size()-1) {
     ThrowError("Invalid index: " << index << " should be: 0 - " << antennas_.size()-1);
   } else {
     antennas_[index].setX(X);
@@ -219,7 +219,7 @@ void ObsInfo::setAntennaY(Length Y, unsigned index)
     ThrowError("The number of antennas is currently unknown.  Use setNumberOfAntennas()");
   }
 
-  if(index < 0 || index > antennas_.size()-1) {
+  if(index > antennas_.size()-1) {
     ThrowError("Invalid index: " << index << " should be: 0 - " << antennas_.size()-1);
   } else {
     antennas_[index].setY(Y);
@@ -237,7 +237,7 @@ void ObsInfo::setAntennaZ(Length Z, unsigned index)
     ThrowError("The number of antennas is currently unknown.  Use setNumberOfAntennas()");
   }
 
-  if(index < 0 || index > antennas_.size()-1) {
+  if(index > antennas_.size()-1) {
     ThrowError("Invalid index: " << index << " should be: 0 - " << antennas_.size()-1);
   } else {
     antennas_[index].setZ(Z);
@@ -1533,10 +1533,12 @@ void ObsInfo::operator=(ObsInfo& obs)
 
 void ObsInfo::printTime()
 {
-#ifdef ObsParameter::SIM_TIMER_TEST
-  COUT("T1 OBS= " << t1time);
-  COUT("T2 OBS= " << t2time);
-  COUT("T3 OBS= " << t3time);
+#ifdef SIM_TIMER_TEST
+  {
+    COUT("T1 OBS= " << t1time);
+    COUT("T2 OBS= " << t2time);
+    COUT("T3 OBS= " << t3time);
+  }
 #endif
 }
 

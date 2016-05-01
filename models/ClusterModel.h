@@ -38,7 +38,7 @@ namespace gcp {
       void initialize();
 
       double pressureToComptonY();
-      double initializePressureToComptonYScaleFactor();
+      void initializePressureToComptonYScaleFactor();
 
       bool pressureToComptonYScaleFactorNeedsInitializing_;
       double pressureToComptonYScaleFactor_;

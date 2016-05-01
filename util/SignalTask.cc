@@ -835,4 +835,6 @@ THREAD_START(SignalTask::startUp)
   SignalTask* signalTask = (SignalTask*)arg;
   signalTask->spawnedThread_->broadcastReady();
   signalTask->run();
+
+  return 0;
 }

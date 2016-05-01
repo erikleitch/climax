@@ -436,7 +436,8 @@ namespace gcp {
       int v_grey2(int ndata, float *zdata, int nx,int ny, 
 		  float xmina=0, float xmaxa=1, float ymina=0, float ymaxa=1, 
 		  float* flag=0,float z1=0, float z2=0, 
-		  char* xlab="", char* ylab="", char* title="", char* unit="");
+		  std::string xlab=std::string(""),  std::string ylab=std::string(""),
+                  std::string title=std::string(""), std::string unit=std::string(""));
 
       // Plot a simple line plot.
       

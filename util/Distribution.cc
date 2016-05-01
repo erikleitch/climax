@@ -538,17 +538,19 @@ SAMP_FN(Distribution::jointGaussSample)
 ostream& 
 gcp::util::operator<<(ostream& os, const Distribution& dist)
 {
-  operator<<(os, (Distribution&) dist);
+    return operator<<(os, (Distribution&) dist);
 }
 
 ostream& 
 gcp::util::operator<<(ostream& os, Distribution& dist)
 {
-  COUT("Distribution: type = " << dist.type_);
+    os << "Distribution: type = " << dist.type_;
 
   if(dist.type_ == Distribution::DIST_UNIFORM) {
-    COUT("min = " << dist.getUniformXMin() << " max = " << dist.getUniformXMax());
+      os << "min = " << dist.getUniformXMin() << " max = " << dist.getUniformXMax();
   }
+  
+  return os;
 }
 
 void Distribution::invalidateTruncatedGaussianParameters()

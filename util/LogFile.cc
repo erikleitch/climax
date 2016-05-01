@@ -160,6 +160,7 @@ std::string LogFile::newFileName()
   
   if(!datePrefix_ && prefix_.size()==0) {
     ThrowError("Zero-length prefix");
+    return "";
   };
   
   /*
@@ -198,6 +199,7 @@ std::string LogFile::newFileName()
   // Max version number exceeded.
   
   ThrowError("Max version number exceeded");
+  return "";
 }
 
 /**.......................................................................

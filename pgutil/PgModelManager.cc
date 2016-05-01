@@ -232,7 +232,7 @@ void PgModelManager::getModel(float xstart, float ystart, bool& read, char& key,
 
 	  // If we just got a radius, we are done for symmetric models
 
-	  if(model.type_ == 'A' || model.type_ == 'B') {
+	  if(model.type_ == PgModel::TYPE_ARNAUD || model.type_ == PgModel::TYPE_BETA) {
 	    accepted = true;
 	    add = true;
 	  } else {

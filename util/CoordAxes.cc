@@ -186,7 +186,7 @@ void CoordAxes::checkValidityOf(Coord& coord)
   for(unsigned iAxis=0; iAxis < coord.nAxis(); iAxis++) {
     unsigned index = coord.getIndex(iAxis);
   
-    if(index < 0 || index > nEl_[iAxis]-1) {
+    if(index > nEl_[iAxis]-1) {
       ThrowError("Index " << index 
 		 << " is out of range for axis "
 		 << iAxis);
@@ -485,4 +485,6 @@ bool CoordAxes::operator==(CoordAxes& axes)
       if(axes.nEl(iAxis) != nEl(iAxis))
 	return false;
   }
+
+  return true;
 }

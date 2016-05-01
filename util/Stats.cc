@@ -283,7 +283,7 @@ void Stats::histogram(std::vector<double>& vec, unsigned nbin, std::vector<doubl
   // Check for finite data
   //------------------------------------------------------------
 
-  if(!finite(minVal) || !finite(maxVal)) {
+  if(!isfinite(minVal) || !isfinite(maxVal)) {
     ThrowError("Data not finite");
   }
 

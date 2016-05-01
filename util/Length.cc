@@ -281,7 +281,7 @@ void Length::setLightTravelTime(Time time)
 void Length::setCentimeters(double cm) 
 {
   val_ = cm;
-  finite_ = finite(cm);
+  finite_ = isfinite(cm);
 }
 
 Vector<Length> gcp::util::operator*(Matrix<double>& mat, Vector<Length>& vec)

@@ -1424,7 +1424,7 @@ void updateHessian(Probability startProb)
 
     // Can't invert nans
 
-    if(!finite(newsigval)) {
+    if(!isfinite(newsigval)) {
       return;
     }
 
@@ -1533,7 +1533,7 @@ bool updateHessian2(Probability startProb)
 
     // Can't invert nans
 
-    if(!finite(newsigval)) {
+    if(!isfinite(newsigval)) {
       return false;
     }
 

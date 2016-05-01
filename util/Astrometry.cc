@@ -85,6 +85,7 @@ double Astrometry::getUt1Utc(double mjdUtc)
     return ut1Utc_->evaluate(mjdUtc);
   } else {
     ThrowError("UT1-UTC ephemeris can't bracket mjd = " << mjdUtc);
+    return 0.0;
   }
 }
 
@@ -100,6 +101,7 @@ double Astrometry::getEqnEqx(double mjdTt)
     return eqnEqx_->evaluate(mjdTt);
   } else {
     ThrowError("EqnEqx ephemeris can't bracket mjd = " << mjdTt);
+    return 0.0;
   }
 }
 

@@ -317,6 +317,7 @@ std::string FitsBinTableReader::getUnit(std::string name)
       return columns_[iCol].unit_;
     }
   }
+  return "?";
 }
 
 std::vector<double> FitsBinTableReader::getDoubleData(unsigned colNo)

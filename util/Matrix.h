@@ -677,6 +677,7 @@ namespace gcp {
 	  return result/deter;
 	} else {
 	  ThrowError("Matrix is not invertible.");
+          return result/deter; // Just so compiler doesn't complain
 	}
       }
     

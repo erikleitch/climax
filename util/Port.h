@@ -45,7 +45,7 @@ namespace gcp {
       /**
        * Connect to the port
        */
-      virtual int connect() {};
+      virtual int connect() {return 0;};
       
       /**
        * Write a message to the port

@@ -17,7 +17,7 @@ Volume::~Volume() {}
 void Volume::setCubicCentimeters(double cm3)
 {
   val_ = cm3;
-  finite_ = finite(cm3);
+  finite_ = isfinite(cm3);
 }
 
 Length Volume::operator/(const Area& area)

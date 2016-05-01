@@ -1,5 +1,6 @@
 #include "slalib.h"
 #include "slamac.h"
+extern "C" {
 void slaPolmo ( double elongm, double phim, double xp, double yp,
                 double *elong, double *phi, double *daz )
 /*
@@ -130,4 +131,5 @@ void slaPolmo ( double elongm, double phim, double xp, double yp,
    *daz = atan2 ( - ynt, - xnt );
 
    return;
+}
 }

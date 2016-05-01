@@ -153,7 +153,8 @@ bool Coord::operator==(Coord& coord)
   // Iterate over axes, checking each for a match
 
   for(unsigned i=0; i < nAxis(); i++) {
-    if(initialized_[i])
+    if(initialized_[i]) {
+
       if(coord.initialized_[i]) {
 
 	// If indices for this axis don't match, they do not match
@@ -166,6 +167,8 @@ bool Coord::operator==(Coord& coord)
       } else {
 	return false;
       }
+
+    }
   }
   return true;
 }

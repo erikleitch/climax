@@ -35,14 +35,14 @@ Area::~Area() {}
 void Area::setSquaredCentimeters(double sqcm)
 {
   val_ = sqcm;
-  finite_ = finite(sqcm);
+  finite_ = isfinite(sqcm);
 }
 
 void Area::setSquaredMpc(double sqMpc)
 {
   double conv = Length::cmPerParsec_ * Length::pcPerMpc_;
   val_ = sqMpc * conv * conv;
-  finite_ = finite(val_);
+  finite_ = isfinite(val_);
 }
 
 double Area::squaredMpc()

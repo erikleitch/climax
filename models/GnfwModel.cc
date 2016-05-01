@@ -360,6 +360,7 @@ double GnfwModel::radialModel(unsigned type, double x, void* params)
     break;
   default:
     ThrowColorError("Unsupported dataset type: " << type, "red");
+    return 0.0;
     break;
   }
 }

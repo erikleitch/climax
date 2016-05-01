@@ -125,6 +125,7 @@ unsigned VisIo::getNumberOfTelescopes()
     return nTelescope_;
   } else {
     ThrowError("Number of telescopes is not set");
+    return 0;
   }
 }
 
@@ -351,6 +352,7 @@ std::string VisIo::getInstrumentName()
     return instrument_;
   } else {
     ThrowError("Instrument name is not set");
+    return "Unknown";
   }
 }
 
@@ -366,6 +368,7 @@ std::string VisIo::getTelescopeName()
     return telescope_;
   } else {
     ThrowError("Telescope name is not set");
+    return "Unknown";
   }
 }
 
@@ -398,6 +401,7 @@ std::string VisIo::getSourceName()
     return srcName_;
   } else {
     ThrowError("Source name is not set");
+    return "Unknown";
   }
 }
 
@@ -413,6 +417,9 @@ HourAngle VisIo::getRa()
     return ra_;
   } else {
     ThrowError("RA is not set");
+    HourAngle ret;
+    ret.setRadians(0.0);
+    return ret;
   }
 }
 
@@ -428,6 +435,9 @@ Declination VisIo::getDec()
     return dec_;
   } else {
     ThrowError("DEC is not set");
+    Declination ret;
+    ret.setRadians(0.0);
+    return ret;
   }
 }
 
@@ -454,6 +464,7 @@ HourAngle VisIo::getRaApp()
     return raApp_;
   } else {
     ThrowError("Apparent RA is not set");
+    return raApp_;
   }
 }
 
@@ -469,6 +480,7 @@ Declination VisIo::getDecApp()
     return decApp_;
   } else {
     ThrowError("Apparent DEC is not set");
+    return decApp_;
   }
 }
 

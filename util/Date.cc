@@ -586,6 +586,7 @@ unsigned Date::validateMonth(std::string month)
       return iM+1;
 
   ThrowError("Invalid month: " << month);
+  return 0;
 }
 
 int Date::validateYear(int year)
@@ -683,10 +684,12 @@ int Date::deltaDays(Date& date1, Date& date2)
 
 unsigned Date::numberOfDays()
 {
-  if(mjd_ >= 0)
+  if(mjd_ >= 0) {
     return (unsigned) mjd_;
-  else 
+  } else  {
     ThrowError("Cannot convert: " << mjd_ << " to an unsigned integer");
+    return 0;
+  }
 }
 
 unsigned Date::day()

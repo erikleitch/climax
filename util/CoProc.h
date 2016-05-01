@@ -58,8 +58,6 @@ namespace gcp {
        */
       CoProc(std::string exe);
 
-      CoProc(char *exe);
-
       CoProc(char *exe, FILE** stdInFp, FILE** stdOutFp, FILE** stdErrFp);
 
       CoProc(char *exe, char** argv, 

@@ -52,6 +52,7 @@ Unit::Units Generic2DObject::getUnits()
     return units_;
   } else {
     ThrowError("No units have been specified for this object");
+    return units_; // Just so compiler doesn't complain
   }
 }
 

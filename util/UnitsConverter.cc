@@ -1,7 +1,5 @@
 #include "gcp/util/UnitsConverter.h"
 
-using namespace std;
-
 using namespace gcp::util;
 
 /**.......................................................................

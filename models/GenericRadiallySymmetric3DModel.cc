@@ -243,6 +243,7 @@ GenericRadiallySymmetric3DModel::~GenericRadiallySymmetric3DModel()
 double GenericRadiallySymmetric3DModel::radialModel(unsigned type, double x, void* params)
 {
   ThrowError("Inheritor has not defined an inherited radialModel() method");
+  return 0.0;
 }
 
 /**.......................................................................
@@ -648,10 +649,10 @@ calculateInterpolationValuesForAllScaleRadii(unsigned type, Image& image)
 
       unsigned nSigma = getMaxNSigma();
 
-      double thetaMin = finite(thetaCore_.prior().getUniformXMin()) ? thetaCore_.prior().getUniformXMin() :
+      double thetaMin = isfinite(thetaCore_.prior().getUniformXMin()) ? thetaCore_.prior().getUniformXMin() :
 	thetaCore_.getVal(thetaCore_.prior().getGaussMean() - nSigma * thetaCore_.prior().getGaussSigma(), "radians");
       
-      double thetaMax = finite(thetaCore_.prior().getUniformXMax()) ? thetaCore_.prior().getUniformXMax() :
+      double thetaMax = isfinite(thetaCore_.prior().getUniformXMax()) ? thetaCore_.prior().getUniformXMax() :
 	thetaCore_.getVal(thetaCore_.prior().getGaussMean() + nSigma * thetaCore_.prior().getGaussSigma(), "radians");
       
       //------------------------------------------------------------
@@ -1049,6 +1050,7 @@ double GenericRadiallySymmetric3DModel::interpolateVolumeIntegral(unsigned type,
 bool GenericRadiallySymmetric3DModel::shapeParametersAreFixed()
 {
   ThrowColorError("Inheritor has not defined shapeParametersAreFixed()", "red");
+  return false;
 }
 
 void GenericRadiallySymmetric3DModel::debugPrint() 

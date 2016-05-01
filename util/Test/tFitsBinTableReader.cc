@@ -72,9 +72,8 @@ int Program::main()
   image.convolve(gauss);
   image.display();
 
-  COUT("Here");
   for(unsigned i=0; i < image.data_.size(); i++) {
-    if(!finite(image.data_[i])) {
+    if(!isfinite(image.data_[i])) {
       COUT("Found invalid data");
     }
   }

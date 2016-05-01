@@ -38,7 +38,7 @@ void PoissonVariate::setMean(double mean)
 
 double PoissonVariate::mean()
 {
-  samplingDistribution().getPoissMean();
+  return samplingDistribution().getPoissMean();
 }
 
 void PoissonVariate::plotPdf(double min, double max, unsigned n)

@@ -259,6 +259,9 @@ int PgModel::getColor() {
   case TYPE_BOX:
     return 10;
     break;
+  default:
+    return 11;
+    break;
   }
 };
 

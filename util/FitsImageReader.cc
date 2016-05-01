@@ -150,7 +150,6 @@ void FitsImageReader::getAxes(unsigned iHdu)
   if(ffgkyj(fptr_, "NAXIS", &nAxis_, &comment[0], &status_) )
     ThrowFitsError("Unable to get number of axes");
 
-  nAxis_ = nAxis_;
   axes_.resize(nAxis_);
 
   ostringstream os;

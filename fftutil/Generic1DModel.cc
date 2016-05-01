@@ -31,6 +31,7 @@ Generic1DModel::~Generic1DModel()
 double Generic1DModel::eval(double x)
 {
   ThrowError("No inherited eval1D method has been defined for this model");
+  return 0.0;
 }
 
 /**.......................................................................
@@ -178,6 +179,7 @@ void Generic1DModel::setThreadPool(ThreadPool* pool)
 void* Generic1DModel::allocateEvalData()
 {
   ThrowError("This inheritor has not defined a method to allocate evaluation data");
+  return 0;
 }
 
 void Generic1DModel::initializeEvalData(void* evalData)
@@ -188,5 +190,5 @@ void Generic1DModel::initializeEvalData(void* evalData)
 double Generic1DModel::eval(void* evalData, double x)
 {
   ThrowError("No envelope(void* evalData, double x) method has been defined for this inherited class");
-
+  return 0.0;
 }

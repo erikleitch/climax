@@ -31,11 +31,11 @@ Fitter::~Fitter() {}
  * Take a chain of accepted samples, compute the power spectrum of the
  * chain and fit a model to the power spectrum
  */
-int Fitter::fitPowerSpectrum(std::vector<double>& yarr, 
-			     std::vector<unsigned>* multiplicity, 
-			     unsigned nFit,
-			     double& p0, double& ks, double& alpha,
-			     unsigned& nSamp)
+void Fitter::fitPowerSpectrum(std::vector<double>& yarr, 
+                              std::vector<unsigned>* multiplicity, 
+                              unsigned nFit,
+                              double& p0, double& ks, double& alpha,
+                              unsigned& nSamp)
 {
   //------------------------------------------------------------
   // Get the power spectrum and inital guesses for fit parameters
@@ -69,17 +69,14 @@ int Fitter::fitPowerSpectrum(std::vector<double>& yarr,
 
   double r = p0/nSamp;
   double js = ks/(2*M_PI)*nSamp;
-
-  //  COUT("nSamp = " << nSamp << " p0 = " << p0 << " ks = " << ks << " alpha = " << alpha << " r = " << p0/nSamp << " j* = " << ks/(2*M_PI)*nSamp);
-  //  COUT("Converged = " << ((r < 0.01 && js > 20) ? "true" : "false"));
 }
 
 /**.......................................................................
  * Take a chain of accepted samples, compute the power spectrum of the
  * chain, fit a model to the power spectrum and plot it
  */
-int Fitter::plotPowerSpectrum(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
-			      double& p0, double& ks, double& alpha)
+void Fitter::plotPowerSpectrum(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
+                               double& p0, double& ks, double& alpha)
 {
   try {
     //------------------------------------------------------------
@@ -165,7 +162,7 @@ int Fitter::fit(Fit_scan *fitscan, float apar[], int ma, Fitter::Func_type type,
 
   if(fitscan->x.size() > 0) {
     for(i=0;i < fitscan->npt;i++) 
-      if(!finite(fitscan->x[i])) {
+      if(!isfinite(fitscan->x[i])) {
 	waserr |= 1;
 	break;
       }
@@ -174,7 +171,7 @@ int Fitter::fit(Fit_scan *fitscan, float apar[], int ma, Fitter::Func_type type,
 
   if(fitscan->y.size() > 0) {
     for(i=0;i < fitscan->npt;i++) 
-      if(!finite(fitscan->y[i])) {
+      if(!isfinite(fitscan->y[i])) {
 	waserr |= 1;
 	break;
       }
@@ -183,7 +180,7 @@ int Fitter::fit(Fit_scan *fitscan, float apar[], int ma, Fitter::Func_type type,
 
   if(fitscan->sd.size() > 0)
     for(i=0;i < fitscan->npt;i++) 
-      if(!finite(fitscan->sd[i])) {
+      if(!isfinite(fitscan->sd[i])) {
 	waserr |= 1;
 	break;
       }

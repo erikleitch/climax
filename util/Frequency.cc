@@ -79,7 +79,7 @@ void Frequency::setMHz(double MHz)
 void Frequency::setHz(double Hz)
 {
   val_     = Hz;
-  finite_ = finite(Hz);
+  finite_ = isfinite(Hz);
 }
 
 /**.......................................................................

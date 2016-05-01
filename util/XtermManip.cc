@@ -153,7 +153,6 @@ void XtermManip::setCursorColor(ColorKey key)
   slot = fg_.find(key);
 
   if(slot != fg_.end()) {
-    COUT("Issuign command with se = " << slot->second);
     std::cout << "\033]12;" << slot->second << "\007";
   }
 }
@@ -247,6 +246,7 @@ XtermManip::ColorKey XtermManip::getColorKey(std::string name)
   }
 
   ThrowError("No such key: " << name);
+  return colorNames_.begin()->second;
 }
 
 void XtermManip::setTextMode(std::string name)
@@ -295,6 +295,7 @@ XtermManip::TextModeKey XtermManip::getTextModeKey(std::string name)
   }
 
   ThrowError("No such key: " << name);
+  return textModeNames_.begin()->second;
 }
 
 void XtermManip::saveCursor()

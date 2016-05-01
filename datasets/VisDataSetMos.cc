@@ -679,6 +679,7 @@ gcp::util::DataSet* VisDataSetMos::getDataSet(std::string name)
   }
 
   ThrowSimpleColorError("Invalid dataset name: " << name << " for dataset manager " << name_, "red");
+  return 0;
 }
 
 /**.......................................................................

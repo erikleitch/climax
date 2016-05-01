@@ -107,15 +107,15 @@ int Program::main()
     y[i] = sample[1];
     z[i] = sample[2];
 
-    if(isnan(x[i]) || !finite(x[i])) {
+    if(isnan(x[i]) || !isfinite(x[i])) {
       x[i] = 0.0;
     }
 
-    if(isnan(y[i]) || !finite(y[i])) {
+    if(isnan(y[i]) || !isfinite(y[i])) {
       y[i] = 0.0;
     }
 
-    if(isnan(z[i]) || !finite(z[i])) {
+    if(isnan(z[i]) || !isfinite(z[i])) {
       z[i] = 0.0;
     }
 

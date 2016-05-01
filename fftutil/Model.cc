@@ -1350,6 +1350,7 @@ void Model::openOutputFile(std::string fileName, std::string runFile)
 double Model::eval(double x)
 {
   ThrowError("No eval() method has been defined by this inheritor");
+  return 0.0;
 }
 
 void Model::fillImage(gcp::util::Image& image)
@@ -1685,7 +1686,7 @@ void Model::printVarStats(Variate* var, unsigned nBin, Stat stat, double nSigma,
 
     if(nameStr.contains(".ra") || nameStr.contains(".dec")) {
 
-      if(!finite(var->getUnitVal()))
+      if(!isfinite(var->getUnitVal()))
 	color = "red";
 
       os << std::left << std::setw(maxNameLen) 
@@ -1700,7 +1701,7 @@ void Model::printVarStats(Variate* var, unsigned nBin, Stat stat, double nSigma,
 
     } else {
 
-      if(!finite(var->getUnitVal()))
+      if(!isfinite(var->getUnitVal()))
 	color = "red";
       
       os << std::left << std::setw(maxNameLen) 

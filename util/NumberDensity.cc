@@ -17,7 +17,7 @@ NumberDensity::~NumberDensity() {}
 void NumberDensity::setInverseCubicCentimeters(double cmm3)
 {
   val_ = cmm3;
-  finite_ = finite(cmm3);
+  finite_ = isfinite(cmm3);
 }
 
 void NumberDensity::setInverseCubicMeters(double mm3)

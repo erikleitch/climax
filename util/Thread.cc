@@ -536,6 +536,8 @@ THREAD_START(Thread::startThread)
   // Remove and execute our cleanup handler.
     
   pthread_cleanup_pop(1);
+
+  return 0;
 }
 
 /**.......................................................................

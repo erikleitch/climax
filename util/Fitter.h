@@ -82,11 +82,11 @@ namespace gcp {
       Fit_scan getPowerSpectrumFitDataNew(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
 					  double& p0, double& ks, double& alpha, unsigned& nSamp);
 
-      int fitPowerSpectrum(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
-			   double& p0, double& ks, double& alpha, unsigned& nSamp);
+      void fitPowerSpectrum(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
+                            double& p0, double& ks, double& alpha, unsigned& nSamp);
 
-      int plotPowerSpectrum(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
-			    double& p0, double& ks, double& alpha);
+      void plotPowerSpectrum(std::vector<double>& yarr, std::vector<unsigned>* multiplicity, unsigned nFit,
+                             double& p0, double& ks, double& alpha);
 
       void getIndices(unsigned n, unsigned iInterval, double frac, int& iStart, int& iStop);
 
