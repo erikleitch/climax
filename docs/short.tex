@@ -1,0 +1,95 @@
+\documentclass[11pt]{article}
+\usepackage{graphicx}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{color}
+
+\parskip 10pt
+%\pagestyle{empty}
+\oddsidemargin 0.5in
+\marginparwidth 0.3in
+%\topmargin 2.0in
+\topmargin 0.5in
+
+\textwidth 6.5in
+\textheight 9.5in
+\voffset -0.7in
+\hoffset -0.5in
+\headsep 0in
+\headheight 0in
+\parindent 0pt
+\pagenumbering{arabic}
+
+\begin{document}
+
+%\newcommand\slash{\char`\\}
+\def\centercode#1{{\begin{center}{\tt #1}\end{center}}}
+\def\viewer{{\tt Viewer}}
+\def\control{{\tt Control}}
+\def\mediator{{\tt Mediator}}
+\def\rtc{{\tt Rtc}}
+\def\daq{{\tt Daq}}
+\def\pmac{{\tt Pmac}}
+\def\todo#1{{\it #1}}
+\def\code#1{{\tt #1}}
+\def\cpp{$C^{\it ++}$}
+\def\c{$C$}
+\def\YSZ{{Y_{\it SZ}}}
+
+\definecolor{orange}{rgb}{1.0,0.55,0.0}
+\definecolor{purple}{rgb}{0.5,0.0,0.5}
+\definecolor{DarkGreen}{rgb}{0.0,0.5,0.0}
+
+\def\action#1{{\textcolor{red}{\it #1}}}
+\def\newaction#1{{\textcolor{orange}{\it #1}}}
+
+\def\bnewaction{\color{orange}\it}
+\def\enewaction{\rm\color{black}}
+
+\def\possible#1{{\textcolor{purple}{\it #1}}}
+\def\done#1{{\textcolor{DarkGreen}{\it #1}}}
+\def\resp#1#2{{\bf Responsible party: #1}, {#2}}
+
+\def\del#1{d#1}
+\def\integral#1#2#3#4{\int^{#1}_{#2}{#3\,\del{#4}}}
+\def\umax{u_{\rm max}}
+\def\climax{{\bf CLiMax}}
+\def\climaxb{{\bf climaxRunManager}}
+\def\betamodel{{$\beta$-model}}
+\def\nagaimodel{{Nagai07 model}}
+\def\arnaudmodel{{Arnaud09 model}}
+\def\markov{{\it Markov}}
+\def\chandra{{\it Chandra}}
+\def\chisq{\chi^2_r}
+\def\mdx{\Delta x}
+\def\delx{\delta x}
+\def\snr{{\it snr}}
+\def\dtsz{\Delta T_{\it SZ}}
+\def\tcmb{T_{\it CMB}}
+\def\R500{R_{\rm 500}}
+\def\M500{M_{\rm 500}}
+\def\T500{T_{\rm 500}}
+\def\P500{P_{\rm 500}}
+\def\mathM500{$M_{\rm 500}$}
+\def\mathR500{$R_{\rm 500}$}
+\def\c500{c_{\rm 500}}
+\def\Msolar{M_{\odot}}
+\def\Mgas{M_{\it gas}}
+\def\Mg500{{M_{\it gas}}_{500}}
+\def\Mt500{{M_{\it tot}}_{500}}
+
+\def\math#1{$#1$}
+
+\newenvironment{myindentpar}[1]%
+ {\tt\begin{list}{}%
+         {\setlength{\leftmargin}{#1}}%
+         \item[]%
+ }
+ {\end{list}}
+
+\input{selfsimilar}
+
+\end{document}
+
+
+% LocalWords:  wiki

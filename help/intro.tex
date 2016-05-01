@@ -1,0 +1,15 @@
+\section{Fourier Sampling}
+
+The Nyquist-Shannon sampling theorem states that a signal that contains
+no frequencies higher than $B$ is completely determined by sampling it
+at a rate of $1/(2B)$.  
+
+In the context of simulating observations with an interferometer, this
+means that if our instrument samples only to a spatial frequency of
+\math{\umax}, then an image sampled at $1/({2\umax})$ will contain all the
+information that the interferometer can detect.
+ 
+Simulated images in \climax\ will therefore be pixelized with $\mdx =
+1/({2\umax})$, with $x_{\rm max}$ given by the specified correlation
+length in the Fourier plane.
+

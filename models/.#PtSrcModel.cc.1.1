@@ -1,0 +1,98 @@
+#include "gcp/models/PtSrcModel.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::models;
+
+/**.......................................................................
+ * Constructor.
+ */
+PtSrcModel::PtSrcModel() :
+  Model(true, true)
+{
+  xOff_.setDegrees(0.0);
+  yOff_.setDegrees(0.0);
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+PtSrcModel::~PtSrcModel() {}
+
+/**.......................................................................
+ * Set the flux of this source
+ */
+void PtSrcModel::setFlux(Flux& flux)
+{
+  flux_ = flux;
+}
+
+void PtSrcModel::setJy(double jy)
+{
+  flux_.setJy(jy);
+}
+
+/**.......................................................................
+ * Set the frequency of this source
+ */
+void PtSrcModel::setFrequency(Frequency& freq)
+{
+  freq_ = freq;
+}
+
+void PtSrcModel::setGHz(double ghz)
+{
+  freq_.setGHz(ghz);
+}
+
+/**.......................................................................
+ * Set the spectral index of this source
+ */
+void PtSrcModel::setSpectralIndex(double spectralIndex)
+{
+  spectralIndex_ = spectralIndex;
+}
+
+/**.......................................................................
+ * Set an offset for this source
+ */
+void PtSrcModel::setOffset(Angle& xOff, Angle& yOff)
+{
+  xOff_ = xOff;
+  yOff_ = yOff;
+}
+
+/**.......................................................................
+ * Construct an image suitable for use with an SZ dataset
+ */
+void PtSrcModel::fillSzImage(Image& image, Frequency& frequency)
+{
+  // Zero the image
+
+  image.zero();
+
+  // Now calculate the pixel corresponding to the current source
+  // location
+
+  unsigned ix = (int)(xOff_ / image.xAxis().getAngularResolution()) + image.xAxis().getNpix()/2;
+  unsigned iy = (int)(yOff_ / image.yAxis().getAngularResolution()) + image.yAxis().getNpix()/2;
+
+  // Set the pixel corresponding to the current location of this
+  // source to the scaled flux
+
+  image.val(ix, iy) = flux_.Jy() * pow((frequency/freq_), spectralIndex_);
+
+#if 0
+  COUT("xOff = " << xOff_);
+  COUT("Setting pixel " << ix << " " << iy << " to " << image.val(ix, iy) << " "
+       << " xsize = " << image.xAxis().getAngularSize()
+       << " ysize = " << image.yAxis().getAngularSize());
+#endif
+
+  // Set the units of this data
+
+  image.setUnits(Image::UNITS_JY);
+
+  image.hasData_ = true;
+}
+

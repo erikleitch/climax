@@ -1,0 +1,118 @@
+#include <iostream>
+#include <math.h>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Exception.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Image.h"
+#include "gcp/fftutil/Antenna.h"
+#include "gcp/fftutil/Dft2d.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+
+KeyTabEntry Program::keywords[] = {
+  { "dev",      "/xs",            "s", "Pgplot device"},
+  { "file",     "",               "s", "FITS file to read in"},
+  { "diameter", "350",            "s", "FITS file to read in"},
+  { "size",     "30",            "d", "Size of the field to generate, in arcminutes"},
+  { "zeropad",  "1",              "i", "Zeropadding factor"},
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+
+void checkPointSourceForwardTransform();
+void checkGaussianForwardTransform();
+void checkUniformForwardTransform();
+void checkUniformBackwardTransform();
+void checkUniformDiskBackwardTransform();
+void checkUniformDiskBackwardTransform2(unsigned zeropad, unsigned diamInCm, float sizeArcmin);
+void checkBlockedApertureUniformDiskBackwardTransform();
+void checkCorrelation();
+
+void apFieldTest();
+void test1();
+
+int Program::main()
+{
+  if(!Program::isDefault("dev")) {
+    PgUtil::open(Program::getStringParameter("dev"));
+    PgUtil::subplot(4,4);
+    PgUtil::setInteractive(false);
+    PgUtil::setOverplot(true);
+  }
+
+  apFieldTest();
+
+  return 0;
+}
+
+void test1()
+{
+  Antenna ant;
+  ant.setType(Antenna::ANT_SZA);
+
+  Angle size(Angle::Degrees(), 0.5);
+  Frequency freq(Frequency::GigaHz(), 30);
+  Image beam = ant.getGaussianPrimaryBeam(512, size, freq);
+
+  PgUtil::advance();
+  beam.display();
+
+  PgUtil::advance();
+  beam.plotRow(256);
+
+  Image beam2;
+
+  beam2.xAxis().setNpix(512);
+  beam2.yAxis().setNpix(512);
+
+  size.setDegrees(0.5);
+
+  beam2.xAxis().setAngularSize(size);
+  beam2.yAxis().setAngularSize(size);
+
+  beam2 = ant.getRealisticPrimaryBeam(beam2, freq);
+
+  PgUtil::advance();
+  beam2.display();
+
+  PgUtil::advance();
+  beam2.plotRow(256);
+
+  Image diff = beam - beam2;
+
+  PgUtil::advance();
+  diff.display();
+}
+
+void apFieldTest()
+{
+  Antenna ant;
+  ant.setType(Antenna::ANT_SZA);
+
+  Image image;
+  Angle size(Angle::Degrees(), 0.5);
+  Frequency freq(Frequency::GigaHz(), 30);
+
+  image.setNpix(512);
+  image.setAngularSize(size);
+
+  Angle xoff, yoff;
+
+  xoff.setDegrees(1e-3);
+  yoff.setDegrees(0.0);
+
+  Image apfield = ant.getRealisticApertureField(image, freq, xoff, yoff);
+
+  PgUtil::advance();
+  apfield.display();
+}

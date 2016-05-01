@@ -1,0 +1,273 @@
+#include <iostream>
+#include <iomanip>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Exception.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Image.h"
+#include "gcp/fftutil/ImGen.h"
+#include "gcp/fftutil/SimVis.h"
+
+#include "cpgplot.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+
+KeyTabEntry Program::keywords[] = {
+  { "npix",     "512",                      "i", "Number of pixels"},
+  { "ind",     "-2",                        "i", "Power law index"},
+
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+
+void oldTest();
+void matlabTest(int npix, int ind);
+
+int Program::main()
+{
+  cpgbeg(0,"/xs",1,1);
+  cpgask(0);
+
+#if 0
+  oldTest();
+#else
+  matlabTest(Program::getIntegerParameter("npix"),Program::getIntegerParameter("ind"));
+#endif
+
+  return 0;
+}
+
+void matlabTest(int npix, int powind)
+{
+  //------------------------------------------------------------
+  // Generate CMB image
+  //------------------------------------------------------------
+
+  gcp::util::ImGen imgen;
+  gcp::util::Angle size;
+
+  size.setDegrees(0.5);
+  imgen.setImageSize(size);
+
+  imgen.setNpix(npix);
+
+  // Normalize the power spectrum to 100 uK
+
+  gcp::util::Temperature tnorm;
+  tnorm.setK(100e-6);
+
+  // Normalize at l = 200.  For power law index = 0, this shouldn't
+  // matter
+
+  imgen.setNormalization(200, tnorm);
+
+  imgen.setPowerSpectrumType(ImGen::TYPE_POWER_LAW);
+  imgen.setPowInd(powind);
+
+  // Finally, generate the image
+
+  imgen.generateImages("I");
+
+  //------------------------------------------------------------
+  // Insert this in the simulation container as the CMB image
+  //------------------------------------------------------------
+
+  SimVis sim;
+
+  sim.setImageSize(size);
+  sim.setImageNpix(npix);
+
+  //------------------------------------------------------------
+  // Install frequencies
+  //------------------------------------------------------------
+
+  unsigned nFreq = 16;
+  std::vector<Frequency> freq(nFreq);
+
+  for(unsigned i=0; i < nFreq; i++) {
+    freq[i].setGHz(35.938 - (1.24 + 0.5 * i));
+  }
+
+  sim.setFrequencies(freq);
+
+  //------------------------------------------------------------
+  // Install as the CMB image
+  //------------------------------------------------------------
+
+  sim.installCmbImage(imgen.images_[0], Stokes::STOKES_I);
+
+  PgUtil::greyScale(imgen.images_[0].data_.size(), &imgen.images_[0].data_[0], npix, npix);
+
+  //------------------------------------------------------------
+  // Now observe the image
+  //------------------------------------------------------------
+
+  SimVis::FT ft;
+  sim.observeImage(0, ft, Stokes::STOKES_I);
+
+  bool bad = false;
+
+  double uvmax = imgen.uvMax(size, npix);
+
+  COUT("Size is: " << size << " npix = " << npix << " uvmax = " << uvmax);
+
+  std::vector<double> uvec(npix*npix);
+  std::vector<double> vvec(npix*npix);
+  std::vector<double> revec(npix*npix);
+  std::vector<double> imvec(npix*npix);
+  std::vector<float> powvec(npix*npix);
+  std::vector<float> badvec(npix*npix);
+
+  double duv = 2*uvmax/npix;
+  double uvmin = -uvmax;
+  unsigned ind,iu,iv;
+  
+  for(unsigned iu=0; iu < npix; iu++) {
+    for(unsigned iv=0; iv < npix; iv++) {
+      ind = iu + npix * iv;
+      uvec[ind] = uvmin + iu * duv;
+      vvec[ind] = uvmin + iv * duv;
+      sim.getVis(ft, uvec[ind], vvec[ind], revec[ind], imvec[ind], bad);
+      powvec[ind] = revec[ind];
+      badvec[ind] = bad;
+    }
+  }
+
+  COUT("Plotting powvec...");
+  PgUtil::greyScale(powvec.size(), &powvec[0], npix, npix, -uvmax, uvmax, -uvmax, uvmax);
+
+  COUT("Plotting badvec...");
+  PgUtil::greyScale(badvec.size(), &badvec[0], npix, npix, -uvmax, uvmax, -uvmax, uvmax);
+}
+
+void oldTest()
+{
+#if 0
+  unsigned npix=256;
+
+  std::vector<float> data(npix*npix);
+  std::vector<float> beam(npix*npix);
+
+  Frequency nu;
+  nu.setGHz(30.0);
+
+  Angle dx;
+  dx.setArcMinutes(0.5/npix * 60);
+
+  Image image(data, Image::UNITS_JY);
+  image.setNativeToJy(nu, dx);
+
+  COUT("Native to Jy is: " << image.nativeToJy_);
+
+  ImGen imgen;
+
+  Angle size;
+  size.setDegrees(0.5);
+  imgen.setImageSize(size);
+  imgen.setNpix(npix);
+
+  imgen.setPowerSpectrumType(ImGen::TYPE_POWER_LAW);
+  imgen.setPowInd(-2);
+
+  gcp::util::Temperature tnorm;
+  tnorm.setK(3e-5);
+  imgen.setNormalization(200, tnorm);
+
+  imgen.generateImages("I");
+
+#if 0
+  for(unsigned i=0; i < npix*npix; i++) {
+    data[i] = imgen.images_[0][i];
+  }
+#else
+  for(unsigned i=0; i < npix*npix; i++) {
+    data[i] = 0.0;
+  }
+  data[128*npix + 128] = 100.0;
+#endif
+
+  double sig = 36;
+  for(unsigned i=0; i < npix; i++) {
+    for(unsigned j=0; j < npix; j++) {
+      double dx = (double)i - npix/2;
+      double dy = (double)j - npix/2;
+
+      beam[i + j*npix] = 0.5*exp(-(dx*dx + dy*dy)/(2*sig*sig));
+    }
+  }
+
+  PgUtil::greyScale(npix*npix, &data[0], npix, npix, 0, 1, 0, 1, 0,  0, 0, "", "", "", "");
+
+  Image image2(data, Image::UNITS_UK);
+  Image beam2(beam,  Image::UNITS_UK);
+
+  COUT("Calling nativeToJy with: nu = " << nu << " and dx = " << dx);
+  image2.setNativeToJy(nu, dx);
+
+  COUT("Native to Jy is: " << image2.nativeToJy_);
+  double uKToK = 1e-6;
+  double KToJyPerSr = (2 * 1.38e-16);
+  double sr = dx.radians() * dx.radians();
+  double cgsToJy = 1e23;
+  double fac = uKToK * KToJyPerSr * sr * cgsToJy;
+
+  COUT("(Should be about: " << setw(12) << std::setprecision(6) << fac << ")");
+  
+  SimVis sim;
+  sim.setImageSize(size);
+  sim.setImageNpix(npix);
+
+
+  std::vector<Frequency> freqs(2);
+
+  freqs[0] = nu;
+  nu.setHz(nu.Hz() * 2);
+  freqs[1] = nu;
+
+  sim.setFrequencies(freqs);
+
+  sim.installCmbImage(image2, Stokes::STOKES_I);
+  // sim.installFgImage(image2, Stokes::STOKES_I);
+  sim.installBeamImage(beam2, 0);
+  sim.installBeamImage(beam2, 1);
+
+  SimVis::FT ft;
+
+  double im,re;
+  bool bad = false;
+
+  sim.observeImage(0, ft, Stokes::STOKES_I);
+
+  sim.getVis(ft, 100, 100, re, im, bad);
+  COUT("Vis = " << re  << (im < 0 ? " - " : " + ") << fabs(im) << " (" << bad << ")"); 
+
+  sim.getVis(ft, 1000, 1000, re, im, bad);
+  COUT("Vis = " << re  << (im < 0 ? " - " : " + ") << fabs(im) << " (" << bad << ")"); 
+
+  sim.getVis(ft, 2000, 2000, re, im, bad);
+  COUT("Vis = " << re  << (im < 0 ? " - " : " + ") << fabs(im) << " (" << bad << ")"); 
+
+#if 1
+  sim.observeImage(1, ft, Stokes::STOKES_I);
+
+  sim.getVis(ft, 100, 100, re, im, bad);
+  COUT("Vis = " << re  << (im < 0 ? " - " : " + ") << fabs(im) << " (" << bad << ")"); 
+
+  sim.getVis(ft, 1000, 1000, re, im, bad);
+  COUT("Vis = " << re  << (im < 0 ? " - " : " + ") << fabs(im) << " (" << bad << ")"); 
+
+  sim.getVis(ft, 2000, 2000, re, im, bad);
+  COUT("Vis = " << re  << (im < 0 ? " - " : " + ") << fabs(im) << " (" << bad << ")"); 
+#endif
+
+#endif
+}

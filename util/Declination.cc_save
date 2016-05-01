@@ -1,0 +1,38 @@
+#include "gcp/util/Declination.h"
+#include "gcp/util/Exception.h"
+
+using namespace std;
+
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+Declination::Declination() : DecAngle()
+{
+  modulo_ = true;
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+Declination::~Declination() {}
+
+void Declination::addRadians(double radians)
+{
+  // Baseclass add function will fold into the range r >= 0 && r <= 2*PI
+
+  Angle::addRadians(radians);
+
+  // Now fold pi/2 -> 3pi/2 into appropriate dec ranges
+
+  if(val_ > M_PI/2 && val_ < 3*M_PI/2) {
+    val_ = M_PI - val_;
+  }
+
+  // And fold 3pi/2 -> 2pi into appropriate dec ranges
+ 
+  if(val_ >= 3*M_PI/2 && val_ <= 2*M_PI) {
+    val_ = val_ - 2*M_PI;
+  }
+}

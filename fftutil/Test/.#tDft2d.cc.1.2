@@ -1,0 +1,205 @@
+#include <iostream>
+#include <math.h>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Exception.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Image.h"
+#include "gcp/fftutil/Dft2d.h"
+
+#include "gcp/models/GaussianClusterModel.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+using namespace gcp::models;
+
+KeyTabEntry Program::keywords[] = {
+  { "dev",      "/xs",              "s", "Pgplot device"},
+  { "file",     "",               "s", "FITS file to read in"},
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+void test1(std::string filename);
+void test2(std::string filename);
+void testPowSpec(std::string file);
+
+int Program::main()
+{
+  //------------------------------------------------------------
+  // If a device was specified, open it now
+  //------------------------------------------------------------
+
+  if(!Program::isDefault("dev")) {
+    PgUtil::open(Program::getStringParameter("dev").c_str());
+  }
+
+  // test1(Program::getStringParameter("file"));
+  // test2(Program::getStringParameter("file"));
+
+  testPowSpec(Program::getStringParameter("file"));
+
+  return 0;
+}
+
+
+void test1(std::string filename)
+{
+  Dft2d testDft;
+  testDft.xAxis().setSpatialFrequencyResolution(7600);
+
+  COUT("Spatial resolution is: " << testDft.xAxis().getAngularResolution());
+
+  Dft2d dft, dft2;
+
+  //------------------------------------------------------------
+  // Read in an image
+  //------------------------------------------------------------
+  
+  gcp::util::Image imageIn, imagePtSrc, imageGauss;
+  imageIn.initializeFromFitsFile(filename);
+
+  COUT("About to display...");
+  imageIn.display();
+
+  imagePtSrc.createDeltaFunctionImage(512,512);
+  imageGauss.createGaussianImage(512,512, 32);
+  COUT("sum = " << imageGauss.sum());
+  imageGauss /= imageGauss.sum();
+
+  imageGauss.display();
+
+  COUT("Here -1");
+  dft.initialize(imagePtSrc);
+
+  COUT("Here 0");
+  //  dft.normalize(true);
+  COUT("Here 1");
+  dft2.initialize(imageGauss);
+  COUT("Here 2");
+
+  COUT("Here 3");
+  dft.computeForwardTransform();
+  COUT("Here 4");
+  dft.plotReal();
+  COUT("Here 5");
+  dft2.computeForwardTransform();
+  COUT("Here 6");
+  dft.complexMultiply(dft2, false);
+  COUT("Here 7");
+  dft.shift();
+  COUT("Here 8");
+  dft.computeInverseTransform();
+  COUT("Here 9");
+  Image imageOut = dft.getImage();
+
+  COUT("Here 10");
+  imageOut.display();
+  COUT("Here 4");
+  PgUtil::close();
+}
+
+void test2(std::string filename)
+{
+  Dft2d dft;
+  Image image;
+  Frequency freq;
+  freq.setGHz(30.0);
+
+  image.setNpix(256);
+  image.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  Angle sigma(Angle::ArcMinutes(), 0.35);
+  image.createGaussianImage(1000, sigma);
+  image.setUnits(Image::UNITS_UK);
+  image.display();
+
+  image.convertToJy(freq);
+  image.display();
+
+  dft.initialize(image);
+  dft.computeForwardTransform();
+  dft.plotAbs();
+
+  GaussianClusterModel model;
+  Temperature tmax;
+  tmax.setMicroK(1000);
+  model.setTMax(tmax);
+  model.setSigma(sigma);
+  model.fillSzImage(image, freq);
+  image.display();
+
+  image.convertToJy(freq);
+  image.display();
+
+  dft.initialize(image);
+  dft.computeForwardTransform();
+  dft.plotAbs();
+
+  // Now change the size of the image
+
+  image.setNpix(512);
+  image.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  model.fillSzImage(image, freq);
+  image.display();
+
+  image.convertToJy(freq);
+  image.display();
+
+  dft.initialize(image);
+  dft.computeForwardTransform();
+  dft.plotAbs();
+  
+  return;
+
+
+  dft.initialize(image);
+  dft.normalize(true);
+
+  image.setNpix(512);
+  image.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image.createGaussianImage(1.0, sigma);
+  image.setUnits(Image::UNITS_K);
+  image.convertToJy(freq);
+
+  dft.initialize(image);
+  dft.normalize(true);
+  dft.computeForwardTransform();
+  dft.plotAbs();
+
+  image.setNpix(1024);
+  image.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image.createGaussianImage(1.0, sigma);
+  image.setUnits(Image::UNITS_K);
+  image.convertToJy(freq);
+
+  dft.initialize(image);
+  dft.normalize(true);
+  dft.computeForwardTransform();
+  dft.plotAbs();
+}
+
+void testPowSpec(std::string file)
+{
+  Image image;
+  image.initializeFromFitsFile(file);
+  image.display();
+
+  Dft2d dft;
+  dft.initialize(image);
+
+  dft.removeMean();
+  dft.computeForwardTransform();
+  dft.shift();
+
+  dft.plotReal();
+  dft.plotImag();
+  dft.plotAbs();
+  dft.plotAbsLog();
+}

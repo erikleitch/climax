@@ -1,0 +1,65 @@
+//============================================================
+// An example of fitting a beta model to short-baseline SZA data
+//============================================================
+
+//------------------------------------------------------------
+// Add the data set
+//------------------------------------------------------------
+
+adddataset name=duvf type=uvf;
+duvf.file = ~eml/projects/climax/climaxTestSuite/A1914.uvf;
+duvf.uvmin = 0;
+duvf.uvmax = 2000;
+
+//------------------------------------------------------------
+// Add the beta model
+//------------------------------------------------------------
+
+addmodel name=m_cluster type=betamodel;
+
+//------------------------------------------------------------
+// Assign priors and/or values to beta model parameters
+//------------------------------------------------------------
+
+m_cluster.thetaCore = 5:295";
+m_cluster.beta = 0.8;
+m_cluster.axialRatio = 1;
+m_cluster.rotang    = 0 degrees;
+m_cluster.spectralType = sz;
+m_cluster.normalizationFrequency = 30 GHz;
+
+m_cluster.Sradio = -5:0 mK;
+m_cluster.xoff   = -60:60";
+m_cluster.yoff   = -60:60";
+
+//------------------------------------------------------------
+// Optional directives for displaying (none of these are required)
+//------------------------------------------------------------
+
+m_cluster.thetaCore[range] = 0:100";
+m_cluster.rotang[range] = 50:150 degrees;
+m_cluster.Sradio[range] = -5:0 mK;
+m_cluster.axialRatio[range] = 0:1;
+
+m_cluster.yoff[order] = 1;
+m_cluster.xoff[order] = 2;
+m_cluster.Sradio[order] = 3;
+m_cluster.thetaCore[order] = 4;
+m_cluster.axialRatio[order] = 5;
+m_cluster.rotang[order] = 6;
+
+//------------------------------------------------------------
+// Directive for outputting the chain to a file
+//------------------------------------------------------------
+
+//output file=~eml/projects/climax/climaxTestSuite/a1914fastpow2.out;
+
+//------------------------------------------------------------
+// Directives controlling the run itself
+//------------------------------------------------------------
+
+ntry  = 10000;
+nburn = 3000;
+nbin  = 50;
+
+dev = 1/xs;

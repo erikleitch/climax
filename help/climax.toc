@@ -1,0 +1,63 @@
+\contentsline {section}{\numberline {1}Quickstart Guide}{5}{section.1}
+\contentsline {subsection}{\numberline {1.1}Introduction}{5}{subsection.1.1}
+\contentsline {subsection}{\numberline {1.2}Theory of Operation}{5}{subsection.1.2}
+\contentsline {subsection}{\numberline {1.3}Defining Datasets}{5}{subsection.1.3}
+\contentsline {subsection}{\numberline {1.4}Defining Models}{6}{subsection.1.4}
+\contentsline {subsubsection}{\numberline {1.4.1}Adding Models}{6}{subsubsection.1.4.1}
+\contentsline {subsubsection}{\numberline {1.4.2}Removing Models}{7}{subsubsection.1.4.2}
+\contentsline {subsubsection}{\numberline {1.4.3}Correlating Model Parameters}{7}{subsubsection.1.4.3}
+\contentsline {subsection}{\numberline {1.5}Global Control Parameters}{8}{subsection.1.5}
+\contentsline {subsubsection}{\numberline {1.5.1}Running Markov Chains}{8}{subsubsection.1.5.1}
+\contentsline {subsubsection}{\numberline {1.5.2}Displaying Datasets and Models}{9}{subsubsection.1.5.2}
+\contentsline {subsubsection}{\numberline {1.5.3}Outputting Chains}{9}{subsubsection.1.5.3}
+\contentsline {subsubsection}{\numberline {1.5.4}Reading Chains Back into {\sc Climax}}{9}{subsubsection.1.5.4}
+\contentsline {subsection}{\numberline {1.6}Examples}{10}{subsection.1.6}
+\contentsline {section}{\numberline {2}The SZ Effect}{11}{section.2}
+\contentsline {subsection}{\numberline {2.1}Comptonization of the CMB}{13}{subsection.2.1}
+\contentsline {subsection}{\numberline {2.2}Integrated Y Estimates}{15}{subsection.2.2}
+\contentsline {subsection}{\numberline {2.3}Mass estimates}{16}{subsection.2.3}
+\contentsline {subsubsection}{\numberline {2.3.1}Some sanity checks}{16}{subsubsection.2.3.1}
+\contentsline {subsubsection}{\numberline {2.3.2}Self-Similar Models --- Theory}{17}{subsubsection.2.3.2}
+\contentsline {section}{\numberline {3}Models}{20}{section.3}
+\contentsline {subsection}{\numberline {3.1}SZ Models}{20}{subsection.3.1}
+\contentsline {subsubsection}{\numberline {3.1.1}Beta Model ({$\beta $-model})}{20}{subsubsection.3.1.1}
+\contentsline {subsubsection}{\numberline {3.1.2}Generalized NFW (GNFW) Model}{20}{subsubsection.3.1.2}
+\contentsline {subsubsection}{\numberline {3.1.3}Nagai07 GNFW Model}{21}{subsubsection.3.1.3}
+\contentsline {subsubsection}{\numberline {3.1.4}Arnaud GNFW Model}{21}{subsubsection.3.1.4}
+\contentsline {subsection}{\numberline {3.2}Problems with the GNFW model}{21}{subsection.3.2}
+\contentsline {subsubsection}{\numberline {3.2.1}Comparing the A10 and N07 P500}{22}{subsubsection.3.2.1}
+\contentsline {subsubsection}{\numberline {3.2.2}Comparing P500 and M500}{22}{subsubsection.3.2.2}
+\contentsline {subsubsection}{\numberline {3.2.3}The A10 Model is not Self-consistent}{23}{subsubsection.3.2.3}
+\contentsline {subsection}{\numberline {3.3}Other Models}{24}{subsection.3.3}
+\contentsline {subsubsection}{\numberline {3.3.1}Image Model}{24}{subsubsection.3.3.1}
+\contentsline {section}{\numberline {4}Datasets}{26}{section.4}
+\contentsline {subsection}{\numberline {4.1}Visibility Datasets}{26}{subsection.4.1}
+\contentsline {subsubsection}{\numberline {4.1.1}Making Images of Visibility Data}{26}{subsubsection.4.1.1}
+\contentsline {subsubsection}{\numberline {4.1.2}Dirty Maps and Pixel Covariance}{27}{subsubsection.4.1.2}
+\contentsline {subsubsection}{\numberline {4.1.3}Synthesized beam}{28}{subsubsection.4.1.3}
+\contentsline {subsubsection}{\numberline {4.1.4}Estimating the clean beam width}{28}{subsubsection.4.1.4}
+\contentsline {subsubsection}{\numberline {4.1.5}Clean images}{29}{subsubsection.4.1.5}
+\contentsline {subsection}{\numberline {4.2}Writing Visibility Datasets}{31}{subsection.4.2}
+\contentsline {subsection}{\numberline {4.3}Stacking Visibility Datasets}{31}{subsection.4.3}
+\contentsline {subsection}{\numberline {4.4}Mosaicked Visibility Datasets}{32}{subsection.4.4}
+\contentsline {subsubsection}{\numberline {4.4.1}Mosaicking Theory}{33}{subsubsection.4.4.1}
+\contentsline {subsubsection}{\numberline {4.4.2}Mosaicked clean images}{34}{subsubsection.4.4.2}
+\contentsline {subsection}{\numberline {4.5}Heterogeneous Visibility Datasets}{34}{subsection.4.5}
+\contentsline {subsection}{\numberline {4.6}Image Datasets}{35}{subsection.4.6}
+\contentsline {subsubsection}{\numberline {4.6.1}Image Handling Basics}{35}{subsubsection.4.6.1}
+\contentsline {subsubsection}{\numberline {4.6.2}Generic Image Dataset}{36}{subsubsection.4.6.2}
+\contentsline {subsubsection}{\numberline {4.6.3}Xray Image Dataset}{37}{subsubsection.4.6.3}
+\contentsline {subsubsection}{\numberline {4.6.4}Radio Image Dataset}{37}{subsubsection.4.6.4}
+\contentsline {section}{\numberline {5}Consistency Tests}{38}{section.5}
+\contentsline {subsection}{\numberline {5.1}Side-by-side Comparison of {$\beta $-model}\ fitting with {\it Markov}}{38}{subsection.5.1}
+\contentsline {subsection}{\numberline {5.2}Sanity check on 3D radial-profile fitting}{40}{subsection.5.2}
+\contentsline {subsection}{\numberline {5.3}Side-by-side comparison of {Nagai07 model}\ fitting with {\it Markov}}{42}{subsection.5.3}
+\contentsline {section}{\numberline {6}Implementation Details}{44}{section.6}
+\contentsline {subsection}{\numberline {6.1}Sampling from multi-variate normal distributions with arbitrary correlations}{44}{subsection.6.1}
+\contentsline {subsection}{\numberline {6.2}Convergence}{44}{subsection.6.2}
+\contentsline {subsection}{\numberline {6.3}Maximum Likelihood Estimators}{46}{subsection.6.3}
+\contentsline {subsubsection}{\numberline {6.3.1}Gaussian Data}{46}{subsubsection.6.3.1}
+\contentsline {subsubsection}{\numberline {6.3.2}Poisson Data}{46}{subsubsection.6.3.2}
+\contentsline {subsubsection}{\numberline {6.3.3}Joint Likelihood Calculation}{47}{subsubsection.6.3.3}
+\contentsline {subsection}{\numberline {6.4}Model Selection}{47}{subsection.6.4}
+\contentsline {section}{\numberline {7}To-do List}{50}{section.7}

@@ -1,0 +1,70 @@
+\subsection{Maximum Likelihood Estimators}
+\label{sec:maxmean}
+
+\subsubsection{Gaussian Data}
+
+The joint likelihood for a set of Gaussian-distributed data is simply
+the product of the individual probabilities:
+
+\begin{eqnarray}
+L \equiv \prod{p_k} &\propto& \prod_k{e^{-(x_k - \mu)^2/2\sigma^2_k}} \\
+                    &=& e^{-\sum_k{(x_k - \mu)^2/2\sigma^2_k}} \\
+                    &\equiv& e^{-\chi^2/2} \\
+\end{eqnarray}
+
+The maximum likelihood estimate of a set of parameters is therefore,
+by definition, the parameters that minimize $\chi^2$.
+
+\subsubsection{Poisson Data}
+
+What if our data are Poisson distributed, say a an X-ray image, where
+each pixel is the number of photons, and does not necessarily contain
+enough photons that the gaussian approximation is even remotely
+justified?  In this case, the joint likelihood is still the product of
+the individual probabilities, but where each probability is given by
+the Poisson pdf:
+
+\begin{equation}
+L \equiv \prod_k{p_k} = \prod_k{{{e^{-\mu_k}\mu_k^k}\over{k!}}}
+\end{equation}
+
+Here $\mu_k$ is the mean expected count rate in pixel $k$, the sum of
+the model prediction and the background count rate.
+
+\subsubsection{Joint Likelihood Calculation}
+
+For chains that involve a combination of Gaussian and
+Poisson-distributed data, the likelihood is straightforwardly calculated as
+
+
+\begin{equation}
+L \equiv \prod_i{L_i},
+\end{equation}
+
+where $i$ ranges over the independent datasets, with $L_i$ calculated
+as above for Gaussian or Poisson datasets.  For purposes of reported
+goodness of fit ($\chisq$), an equivalent $\chisqnor$ distributed is
+constructed for Poisson data, noting that:
+
+\begin{equation}
+f_N(\chisqnor) = {1\over{2\Gamma(N/2)}}e^{-\chisqnor/2}\left({\chisqnor\over{2}}\right)^{N/2-1}
+\end{equation}
+
+and
+
+\begin{equation}
+P(\mu;k) = {1\over{k!}}e^{-\mu} \mu^{k}
+\end{equation}
+
+with the identification of
+
+\begin{equation}
+\chisqnor = 2\mu
+\end{equation}
+
+and 
+
+\begin{equation}
+N = 2(k + 1)
+\end{equation}
+

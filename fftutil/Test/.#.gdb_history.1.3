@@ -1,0 +1,135 @@
+b main
+r
+n
+s
+n
+s
+complete b 'Sim
+complete b 'SimV
+complete b 'sza::util::SimVis::inst
+complete b 'sza::util::SimVis::installF
+b 'sza::util::SimVis::installFgImage(sza::util::SimVis::SimImage&, sza::util::Stokes::Param, unsigned int)' 
+r
+c
+n
+s
+n
+s
+n
+r file=a963.uvf perc=0.98
+pwd
+r file=../../a963.uvf perc=0.98
+up
+quit
+pwd
+r file=../../a963.uvf perc=0.98
+up
+quit
+r file=../../a963.uvf perc=0.9
+p dftInd
+p nxZeroPad_
+p nyZeroPad_
+print 128 * 128/2
+p u
+p v
+p u
+p v
+up
+p iGroup
+b 190 if iGroup==12
+clear
+r file=../../a963.uvf perc=0.9
+p iGroup
+up
+p iGroup
+b 190
+clear
+b 190
+c
+r r file=../../a963.uvf perc=0.9
+r file=../../a963.uvf perc=0.9
+p iGroup
+n
+c
+c
+c
+c
+p iGroup
+c
+p iGroup
+c
+p iGroup
+c
+p iGroup
+c
+p iGroup
+c
+p iGroup
+n
+p dftInd
+r file=a963.uvf perc=0.9
+r file=../a963.uvf perc=0.9
+r file=../../a963.uvf perc=0.9
+up
+p 191
+r file=../../a963.uvf perc=0.9
+s
+up
+b 191
+r file=../../a963.uvf perc=0.9
+p iGroup
+n
+s
+n
+n
+s
+n
+p uRes
+p vRes
+p v
+n
+p iu
+p iv
+p iu
+p nxZeroPad_
+p abs(iu)
+n
+p iu
+p nxZeroPad_ - iu
+p nxZeroPad_
+p iu
+r file=a963.uvf
+pwd
+r file=../../a963.uvf
+up
+quit
+r file=a963.uvf
+r file=/Users/eml/projects/climax/climaxSrc/a963.uvf
+up
+quit
+quit
+r
+/xs
+p i
+up
+p flag
+down
+p i+nx*j
+up
+up
+down
+up
+p ndata
+p flag
+p flag[0]
+p flag[2072]
+p flag[2073]
+b main
+r
+n
+s
+n
+s
+n
+s
+s

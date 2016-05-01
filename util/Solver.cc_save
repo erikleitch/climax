@@ -1,0 +1,115 @@
+#include "gcp/util/Solver.h"
+
+using namespace std;
+
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+Solver::Solver(unsigned nPar) 
+{
+  dydPar_.resize(nPar, nPar);
+
+  parVals_.resize(nPar);
+  alpha_.resize(nPar);
+  beta_.resize(nPar);
+  fit_.resize(nPar);
+
+  chisq_ = 0.0;
+
+  for(unsigned iPar=0; iPar < nPar; iPar++)
+    fit_[iPar] = true;
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+Solver::~Solver() {}
+
+void Solver::setEvalFn(EVAL_FN(*fn))
+{
+  evalFn_ = fn;
+}
+
+void Solver::setData(std::vector<double>& x, 
+		     std::vector<double>& y, 
+		     std::vector<double>& s)
+{
+  if(x.size() != y.size() || x.size() != s.size())
+    ThrowError("Arrays have incompatible sizes");
+
+  xData_ = x;
+  yData_ = y;
+  sData_ = s;
+}
+ 
+unsigned Solver::getNFit()
+{
+  //------------------------------------------------------------
+  // Iterate over parameters
+  //------------------------------------------------------------
+
+  unsigned nFit=0;
+
+  for(unsigned iPar=0; iPar < nPar; iPar++) {
+    
+    // If we are fitting this parameter
+    
+    if(fit_[iPar]) 
+      nFit++;
+  }
+  
+  return nFit;
+}
+
+void Solver::calculateCoefficients()
+{
+  unsigned nFit = getNFit();
+  unsigned j,k,l,m;
+
+  //------------------------------------------------------------
+  // Now zero arrays prior to calculation
+  //------------------------------------------------------------
+
+  for(unsigned iPar1=0; iPar1 < nFit; iPar1++) {
+
+    beta_[iPar1] = 0.0;
+
+    for(unsigned iPar2=0; iPar2 <= iPar1; iPar2++) 
+      alpha_[iPar1][iPar2] = 0.0;
+  }
+
+  //------------------------------------------------------------
+  // Iterate over data, updating chisq
+  //------------------------------------------------------------
+
+  chisq_ = 0.0;
+
+  double yMod;
+  for(unsigned iData=0; iData < nData; iData++) {
+
+    evalFn_(xData[iData], parVals_, yMod, dydPars_);
+
+    sig2i = 1.0/(sData_[iData] * sData_[iData]);
+
+    dy = yData_[iData] - yMod;
+    
+    for(j=-1,l=0;l<ma;l++) {
+
+      if(fit_[l]) {
+	wt = dyda[l] * sig2i;
+	for(j++,k=-1,m=0;m<=l;m++)
+	  if(fit_[m]) 
+	    alpha_[j][++k] += wt * dydPars_[m];
+
+	beta_[j] += dy*wt;
+      }
+    }
+    chisq_ += dy*dy*sig2i;
+  }
+
+  for(j=1; j < nFit; j++)
+    for(k=0; k < j; k++) 
+      alpha_[k][j] = alpha_[j][k];
+}

@@ -1,0 +1,117 @@
+#include <iostream>
+#include <iomanip>
+
+#include <cmath>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/util/MiriadIo.h"
+#include "gcp/util/Exception.h"
+#include "gcp/util/Sampler.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include <vector>
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+
+KeyTabEntry Program::keywords[] = {
+  { "ntrial",     "1000", "i", "Number of trials"},
+  { "nsamp",      "10", "i", "Number of samples per trial"},
+  { "chisq",      "42", "d", "Chisquared value to test"},
+  { "ndof",       "51", "i", "Number of dof"},
+  { "seed",       "1",  "i", "Seed"},
+  { "file",       "c0554.1SL_30A2813.5.mir",  "s", "File to read"},
+  { "var",        "systemp",  "s", "Variable name to test"},
+  { "nhist",      "10", "i", "number of histogram bins"},
+  { END_OF_KEYWORDS}
+};
+
+void Program::initializeUsage() {};
+
+int Program::main()
+{
+  MiriadIo io;
+
+  unsigned nRecord, min, max;
+  io.getStats(Program::getStringParameter("file"), nRecord, min, max);
+
+  COUT("Found nrecord = " << nRecord << " min = " << min << " max = " << max);
+
+  io.readMiriadFile(Program::getStringParameter("file"));
+
+  char type;
+  int len;
+  io.getTypeAndLength(Program::getStringParameter("var"), type, len);
+  COUT("Type is: " << type << " len = " << len);
+
+  COUT("nant = " << io.readIntVar("nants"));
+  COUT("nspect = " << io.readIntVar("nspect"));
+
+#if 1
+  while(!io.atEnd()) {
+    io.readNextRecord();
+
+    COUT("vis is now: " << io.recordNo_);
+    COUT("Re = " << io.readVisData_[0] << " Im = " << io.readVisData_[1]);
+
+    COUT("Preamble[0] = " << io.preamble_[0]);
+    COUT("Preamble[1] = " << io.preamble_[1]);
+    COUT("Preamble[2] = " << io.preamble_[2]);
+    COUT("Preamble[3] = " << io.preamble_[3]);
+    COUT("Preamble[4] = " << io.preamble_[4]);
+
+    if(io.recordNo_ % 100000 == 0) {
+      COUT("vis is now: " << io.recordNo_);
+      COUT("Re = " << io.readVisData_[0] << " Im = " << io.readVisData_[1]);
+    }
+
+#if 0
+    antpos = io.readFloatVar("wsystemp", nsystemp);
+
+    for(unsigned iTemp=0; iTemp < nsystemp; iTemp++) {
+      std::cout << antpos[iTemp] << " ";
+    }
+    std::cout << std::endl;
+#endif
+
+#if 0
+    float tau = io.readFloatVar("tau230");
+    COUT("tau = " << tau);
+#endif
+
+#if 1
+    float airtemp = io.readFloatVar("airtemp");
+    std::cout << airtemp;
+#endif
+
+#if 1
+    std::string src = io.readStringVar("source");
+    std::cout << "Source = " << src;
+#endif
+
+#if 1
+    double time = io.readDoubleVar("time");
+    COUT("time = " << setw(18) << setprecision(12) << time);
+#endif
+
+#if 0
+    std::vector<double> antel = io.readDoubleVar("antel", nAnt);
+
+    for(unsigned iAnt=0; iAnt < nAnt; iAnt++) {
+      std::cout  << antel[iAnt] << " ";
+    }
+#endif
+    
+#if 1
+    std::cout << std::endl;
+#endif
+
+  }
+
+#endif
+
+  return 0;
+}

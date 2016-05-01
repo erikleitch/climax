@@ -1,0 +1,551 @@
+#include "gcp/util/Exception.h"
+#include "gcp/util/FitsUvfReader.h"
+#include "gcp/util/Frequency.h"
+
+#include <sstream>
+#include <iomanip>
+
+using namespace std;
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+FitsUvfReader::FitsUvfReader() 
+{
+}
+
+FitsUvfReader::FitsUvfReader(std::string file) 
+{
+  openFile(file);
+}
+
+void FitsUvfReader::openFile(std::string file)
+{
+  nKeyword_ = 0;
+  nPar_     = 0;
+  nGroup_   = 0;
+
+  ifDefault_.n_      = 1;
+  ifDefault_.refPix_ = 1;
+  ifDefault_.delta_  = 0;
+
+  open(file);
+
+  // Get the number of keywords
+
+  int morekeys;
+
+  if(ffghsp(fptr_, &nKeyword_, &morekeys, &status_) > 0)
+    ThrowFitsError("Unable to get header information");
+
+  // Now read all relevant header information
+
+  getAxes();
+  getHeaderInfo();
+  getPars();
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+FitsUvfReader::~FitsUvfReader() {}
+
+/**.......................................................................
+ * Initialize axis pointers to NULL
+ */
+void FitsUvfReader::initAxes()
+{
+  complex_ = 0;
+  stokes_  = 0;
+  freq_    = 0;
+  if_      = 0;
+  ra_      = 0;
+  dec_     = 0;
+}
+
+/**.......................................................................
+ * Read generic header information
+ */
+void FitsUvfReader::getHeaderInfo()
+{
+  std::string comment;
+  comment.resize(80);
+
+  object_.resize(80);
+  telescope_.resize(80);
+  instrument_.resize(80);
+
+  // Read the OBJECT keyword
+
+  int nfound=0;
+
+  if(ffgkys(fptr_, "OBJECT", &object_[0], &comment[0], &status_))
+    ThrowFitsError("Unable to get OBJECT keyword");
+
+  if(ffgkys(fptr_, "TELESCOP", &telescope_[0], &comment[0], &status_))
+    ThrowFitsError("Unable to get TELESCOP keyword");
+
+  if(ffgkys(fptr_, "INSTRUME", &instrument_[0], &comment[0], &status_))
+    ThrowFitsError("Unable to get INSTRUME keyword");
+
+  double ra;
+  if(ffgkyd(fptr_, "OBSRA", &ra, &comment[0], &status_)) {
+    ReportError("Warning: unable to get OBSRA keyword");
+    ra = ra_->refVal_;
+    status_ = 0;
+  }
+  obsRa_.setDegrees(ra);
+
+  double dec;
+  if(ffgkyd(fptr_, "OBSDEC", &dec, &comment[0], &status_)) {
+    ReportError("Warning: unable to get OBSDEC keyword");
+    dec = dec_->refVal_;
+    status_ = 0;
+  }
+  obsDec_.setDegrees(dec);
+
+  dateObs_.resize(80);
+  if(ffgkys(fptr_, "DATE-OBS", &dateObs_[0], &comment[0], &status_)) {
+    ReportError("Warning: unable to get DATE-OBS keyword");
+    dateObs_ = "UNKNOWN";
+    status_ = 0;
+  }
+
+  if(ffgkyd(fptr_, "EQUINOX", &equinox_, &comment[0], &status_)) {
+    ReportError("Warning: unable to get EQUINOX keyword: assuming these are J2000 coordinates");
+    equinox_ = 2001.0;
+    status_ = 0;
+  }
+}
+
+/**.......................................................................
+ * Read axis descriptions from the main HDU
+ */
+void FitsUvfReader::getAxes()
+{
+  initAxes();
+
+  std::string comment;
+  comment.resize(80);
+
+  // Read the NAXIS keyword
+
+  int nfound;
+  if(fits_read_keys_lng(fptr_, "NAXIS", 0, 1, &nAxis_, &nfound, &status_) )
+    ThrowFitsError("Unable to get number of axes");
+
+  // UVF FITS files have NAXIS0 = 0 to indicate that only groups are
+  // present.  We ignore this 'fake' axis
+
+  nAxis_ = nAxis_-1;
+  axes_.resize(nAxis_);
+
+  ostringstream os;
+
+  // For each axis in the header, read its size and type
+
+  for(int iAxis=0; iAxis < nAxis_; iAxis++) {
+
+    os.str("");
+
+    // Get the size
+
+    os << "NAXIS" << (iAxis+2);
+
+    if(ffgkyj(fptr_, (char*)os.str().c_str(), &axes_[iAxis].n_, 
+	      &comment[0], &status_) )
+      ThrowFitsError("Unable to get: " << os.str()); 
+
+    // Get the type
+
+    os.str("");
+    os << "CTYPE" << (iAxis+2);
+
+    axes_[iAxis].type_.resize(70);
+    axes_[iAxis].typeComment_.resize(80);
+
+    if(ffgkys(fptr_, (char*)os.str().c_str(), &axes_[iAxis].type_[0], 
+	      &axes_[iAxis].typeComment_[0], &status_))
+      ThrowFitsError("Unable to get column type for column: " << iAxis);
+
+    // Get the reference value
+
+    os.str("");
+    os << "CRVAL" << (iAxis+2);
+
+    if(ffgkyd(fptr_, (char*)os.str().c_str(), &axes_[iAxis].refVal_, 
+	      &comment[0], &status_))
+       ThrowFitsError("Unable to get reference value for column: " << iAxis);
+
+    // Get the reference "pixel"
+
+    os.str("");
+    os << "CRPIX" << (iAxis+2);
+
+    if(ffgkyd(fptr_, (char*)os.str().c_str(), &axes_[iAxis].refPix_, 
+	      &comment[0], &status_))
+       ThrowFitsError("Unable to get reference pixel for column: " << iAxis);
+
+    // Get the pixel delta
+
+    os.str("");
+    os << "CDELT" << (iAxis+2);
+
+    if(ffgkyd(fptr_, (char*)os.str().c_str(), &axes_[iAxis].delta_, 
+	      &comment[0], &status_))
+      ThrowFitsError("Unable to get delta for column: " << iAxis);
+
+    // Store the column number associated with this column
+
+    axes_[iAxis].iCol_ = iAxis+2;
+
+    // Keep pointers to recognized axes
+
+    if(strstr(axes_[iAxis].type_.c_str(),"COMPLEX") != 0)
+      complex_ = &axes_[iAxis];
+    else if(strstr(axes_[iAxis].type_.c_str(),"STOKES") != 0)
+      stokes_ = &axes_[iAxis];
+    else if(strstr(axes_[iAxis].type_.c_str(),"FREQ") != 0)
+      freq_ = &axes_[iAxis];
+    else if(strstr(axes_[iAxis].type_.c_str(),"IF") != 0)
+      if_ = &axes_[iAxis];
+    else if(strstr(axes_[iAxis].type_.c_str(),"RA") != 0)
+      ra_ = &axes_[iAxis];
+    else if(strstr(axes_[iAxis].type_.c_str(),"DEC") != 0)
+      dec_ = &axes_[iAxis];
+  }
+
+  // Not having an IF is not necessarily an error
+
+  if(if_ == 0) {
+    ifDefault_.refVal_ = freq_->refVal_;
+    if_ = &ifDefault_;
+  }
+
+  if(complex_ == 0 || stokes_ == 0 || freq_ == 0 || if_ == 0 || 
+     ra_ == 0 || dec_ == 0)
+    ThrowFitsError("File is missing required axes");
+}
+
+/**.......................................................................
+ * Initialize parameter info from the main HDU
+ */ 
+void FitsUvfReader::initPars()
+{
+  u_ = 0;
+  v_ = 0;
+  w_ = 0;
+  date_ = 0;
+}
+
+/**.......................................................................
+ * Read parameter info from the main HDU
+ */ 
+void FitsUvfReader::getPars()
+{
+  initPars();
+
+#if 0
+  int hdutype;
+  if(fits_movabs_hdu(fptr_, 1, &hdutype, &status_) > 0) {
+    ThrowFitsError("Problem moving to the head of the file");
+  }
+#endif
+  // Read the GCOUNT keyword
+
+  int nfound;
+  if(fits_read_keys_lng(fptr_, "GCOUNT", 0, 1, &nGroup_, &nfound, &status_) )
+    ThrowFitsError("Unable to get number of groups");
+
+  if(fits_read_keys_lng(fptr_, "PCOUNT", 0, 1, &nPar_, &nfound, &status_) )
+    ThrowFitsError("Unable to get number of parameters");
+
+  pars_.resize(nPar_);
+
+  ostringstream os;
+
+  // For each parameter in the header, read its size and type
+
+  for(int iPar=0; iPar < nPar_; iPar++) {
+    os.str("");
+
+    // Get the type
+
+    os.str("");
+    os << "PTYPE" << (iPar+1);
+
+    pars_[iPar].type_.resize(70);
+    char* cptr = &pars_[iPar].type_[0];
+
+    if(fits_read_keys_str(fptr_, (char*)os.str().c_str(), 0, 1, &cptr, &nfound, &status_))
+       ThrowFitsError("Unable to get column type for column: " << iPar);
+
+    // Get the scale factor
+
+    os.str("");
+    os << "PSCAL" << (iPar+1);
+
+    if(fits_read_keys_dbl(fptr_, (char*)os.str().c_str(), 0, 1, &pars_[iPar].scale_, &nfound, &status_))
+       ThrowFitsError("Unable to get parameter scale for par: " << iPar);
+
+    // Get the zero
+
+    os.str("");
+    os << "PZERO" << (iPar+1);
+
+    if(fits_read_keys_dbl(fptr_, (char*)os.str().c_str(), 0, 1, &pars_[iPar].zero_, &nfound, &status_))
+       ThrowFitsError("Unable to get parameter zero for par: " << iPar);
+
+    // Store the column number associated with this column
+
+    pars_[iPar].iPar_ = iPar+1;
+
+    // Keep pointers to recognized parameters
+
+    if(strstr(pars_[iPar].type_.c_str(), "UU") != 0) {
+      u_ = &pars_[iPar];
+      iu_ = iPar;
+
+      std::string comment;
+      comment.resize(80);
+
+      if(ffgkey(fptr_, (char*)os.str().c_str(), cptr, &comment[0], &status_))
+	ThrowFitsError("Unable to get comment field for column: " << iPar);
+
+      if(strstr(comment.c_str(), "(cm)") != 0)
+	uUnit_ = CM;
+      else
+	uUnit_ = SECONDS;
+
+    } else if(strstr(pars_[iPar].type_.c_str(), "VV") != 0) {
+      v_ = &pars_[iPar];
+      iv_ = iPar;
+
+      std::string comment;
+      comment.resize(80);
+
+      if(ffgkey(fptr_, (char*)os.str().c_str(), cptr, &comment[0], &status_))
+	ThrowFitsError("Unable to get comment field for column: " << iPar);
+
+      if(strstr(comment.c_str(), "(cm)") != 0)
+	vUnit_ = CM;
+      else
+	vUnit_ = SECONDS;
+
+    } else if(strstr(pars_[iPar].type_.c_str(), "WW") != 0) {
+      w_ = &pars_[iPar];
+      iw_ = iPar;
+
+      std::string comment;
+      comment.resize(80);
+
+      if(ffgkey(fptr_, (char*)os.str().c_str(), cptr, &comment[0], &status_))
+	ThrowFitsError("Unable to get comment field for column: " << iPar);
+
+      if(strstr(comment.c_str(), "(cm)") != 0)
+	wUnit_ = CM;
+      else
+	wUnit_ = SECONDS;
+
+    } else if(strstr(pars_[iPar].type_.c_str(), "BASELINE") != 0) {
+      baseline_ = &pars_[iPar];
+      ibaseline_ = iPar;
+    } else if(strstr(pars_[iPar].type_.c_str(), "DATE") != 0) {
+      date_ = &pars_[iPar];
+
+      // This is a bit of a kludge; the DATE field is repeated, once
+      // for the day number, and once for the seconds.  After this is
+      // called for the second time, idate will point to the first
+      // occurence of DATE.
+
+      idate_ = iPar-1;
+    }
+
+  }
+
+  // Check that all required fields were declared
+
+  if(u_ == 0 || v_ == 0 || w_ == 0 || baseline_ == 0 || date_ == 0)
+    ThrowFitsError("Groups are missing required parameters");
+}
+
+/**.......................................................................
+ * Read all data for a visibility
+ */
+void FitsUvfReader::readData(long group, Vis& vis)
+{
+  readGroup(group, vis);
+  readPrimaryData(group, vis);
+}
+
+/**.......................................................................
+ * Read the group data
+ */
+void FitsUvfReader::readGroup(long group, Vis& vis)
+{
+  double pars[nPar_];
+
+  if(ffggpd(fptr_, group+1, 1, nPar_, pars, &status_) > 0) {
+    ThrowFitsError("Unable to get group");
+  }
+
+  for(unsigned iPar=0; iPar < nPar_; iPar++) {
+    pars[iPar] =  pars[iPar] * pars_[iPar].scale_ + pars_[iPar].zero_;
+  }
+
+  vis.u_ = pars[iu_];
+  vis.v_ = pars[iv_];
+  vis.w_ = pars[iw_];
+
+  vis.baseline_ = (unsigned int)pars[ibaseline_];
+  vis.jd_       = pars[idate_] + pars[idate_+1];
+}
+
+/**.......................................................................
+ * Fill a visibility with implicit data, based on its location in the
+ * FITS multidimensional axis space
+ */
+void FitsUvfReader::readPrimaryData(long group, Vis& vis)
+{
+  double vals[3];
+  int anynull=0;
+
+  // The number of visibility triplets (re, im, wt) per group
+
+  unsigned nVis = dec_->n_ * ra_->n_ * if_->n_ * freq_->n_ * stokes_->n_;
+
+  vis.dims_.resize(5);
+  vis.dims_[0] = stokes_->n_;
+  vis.dims_[1] = freq_->n_;
+  vis.dims_[2] = if_->n_;
+  vis.dims_[3] = ra_->n_;
+  vis.dims_[4] = dec_->n_;
+
+  vis.re_.resize(nVis);
+  vis.im_.resize(nVis);
+  vis.wt_.resize(nVis);
+  vis.stokes_.resize(nVis);
+  vis.freq_.resize(nVis);
+  vis.if_.resize(nVis);
+  vis.ra_.resize(nVis);
+  vis.dec_.resize(nVis);
+
+  unsigned iVis=0;
+  for(unsigned iDec=1; iDec <= dec_->n_; iDec++) {
+    double dec = dec_->refVal_ + (dec_->refPix_ - iDec) * dec_->delta_;
+
+    for(unsigned iRa=1; iRa <= ra_->n_; iRa++) {
+      double ra = ra_->refVal_ + (ra_->refPix_ - iRa) * ra_->delta_;
+
+      for(unsigned iIf=1; iIf <= if_->n_; iIf++) {
+	double ifVal = if_->refVal_ + (if_->refPix_ - iIf) * if_->delta_;
+
+	for(unsigned iFreq=1; iFreq <= freq_->n_; iFreq++) {
+	  double freq = freq_->refVal_ + (freq_->refPix_ - iFreq) * freq_->delta_;
+
+	  for(unsigned iStokes=1; iStokes <= stokes_->n_; iStokes++) {
+	    double stokes = stokes_->refVal_ + (stokes_->refPix_ - iStokes) * stokes_->delta_;
+
+	    if(ffgpvd(fptr_, group+1, 3*iVis+1, 3, 0.0, vals, &anynull, &status_) > 0)
+	      ThrowFitsError("Unable to get primary data for group: " << group);
+
+	    vis.re_[iVis] = vals[0];
+	    vis.im_[iVis] = vals[1];
+	    vis.wt_[iVis] = vals[2];
+
+	    vis.stokes_[iVis] = stokes;
+	    vis.freq_[iVis]   = freq;
+	    vis.if_[iVis]     = ifVal;
+	    vis.ra_[iVis]     = ra;
+	    vis.dec_[iVis]    = dec;
+
+	    ++iVis;
+	  }
+	}
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Write the contents of this object to an ostream
+ */
+ostream& 
+gcp::util::operator<<(ostream& os, FitsUvfReader::Vis& vis)
+{
+  os << "U = " << vis.u_ << std::endl;
+  os << "V = " << vis.v_ << std::endl;
+  os << "W = " << vis.w_ << std::endl;
+
+  os << "freq[0] = " << vis.freq_[0] << std::endl;
+  os << "freq[1] = " << vis.freq_[1] << std::endl;
+  os << "if[0]   = " << vis.if_[0]   << std::endl;
+  os << "if[1]   = " << vis.if_[1]   << std::endl;
+
+  os << "baseline = " << vis.baseline_ << std::endl;
+  os << "JD = " << std::setprecision(12) << vis.jd_ << std::endl;
+  return os;
+}
+
+std::vector<double> FitsUvfReader::freqs()
+{
+  std::vector<double> vals(nFreq());
+
+  for(unsigned iFreq=0; iFreq < freq_->n_; iFreq++) 
+    vals[iFreq] = freq_->refVal_ + (freq_->refPix_ - (iFreq+1)) * freq_->delta_;
+
+  return vals;
+}
+
+void FitsUvfReader::setFreqs(double* vals)
+{
+  for(unsigned iFreq=0; iFreq < freq_->n_; iFreq++) 
+    vals[iFreq] = freq_->refVal_ + (freq_->refPix_ - (iFreq+1)) * freq_->delta_;
+}
+
+std::vector<double> FitsUvfReader::ifs()
+{
+  std::vector<double> vals(nIf());
+
+  for(unsigned iIf=0; iIf < if_->n_; iIf++) 
+    vals[iIf] = if_->refVal_ + (if_->refPix_ - (iIf+1)) * if_->delta_;
+
+  return vals;
+}
+
+double FitsUvfReader::ifDelta()
+{
+  return if_->delta_;
+}
+
+void FitsUvfReader::setIfs(double* vals)
+{
+  for(unsigned iIf=0; iIf < if_->n_; iIf++) 
+    vals[iIf] = if_->refVal_ + (if_->refPix_ - (iIf+1)) * if_->delta_;
+}
+
+void FitsUvfReader::setStokes(double* vals)
+{
+  for(unsigned iStokes=0; iStokes < stokes_->n_; iStokes++) 
+    vals[iStokes] = stokes_->refVal_ + (stokes_->refPix_ - (iStokes+1)) * stokes_->delta_;
+}
+
+void FitsUvfReader::getAxisData(double* vals, unsigned iAxis)
+{
+  Axis* axis = &axes_[iAxis];
+
+  for(unsigned i=0; i < axis->n_; i++) 
+    vals[i] = axis->refVal_ + (axis->refPix_ - (i+1)) * axis->delta_;
+}
+
+std::vector<unsigned> FitsUvfReader::groupAxisDimsMatlabOrder()
+{
+  std::vector<unsigned> dims(axes_.size()-1);
+
+  unsigned i=0;
+  for(int iAxis=axes_.size()-1; iAxis >= 1; iAxis--, i++)
+    dims[i] = axes_[iAxis].n_;
+
+  return dims;
+}

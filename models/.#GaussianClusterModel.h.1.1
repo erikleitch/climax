@@ -1,0 +1,58 @@
+// $Id: GaussianClusterModel.h,v 1.1 2011/01/20 19:34:21 eml Exp $
+
+#ifndef GCP_MODELS_GAUSSIANCLUSTERMODEL_H
+#define GCP_MODELS_GAUSSIANCLUSTERMODEL_H
+
+/**
+ * @file GaussianClusterModel.h
+ * 
+ * Tagged: Fri Sep 17 15:47:31 PDT 2010
+ * 
+ * @version: $Revision: 1.1 $, $Date: 2011/01/20 19:34:21 $
+ * 
+ * @author tcsh: username: Command not found.
+ */
+#include "gcp/fftutil/Image.h"
+
+#include "gcp/models/ClusterModel.h"
+
+#include "gcp/util/Temperature.h"
+
+namespace gcp {
+  namespace models {
+
+    class GaussianClusterModel : public ClusterModel {
+    public:
+
+      /**
+       * Constructor.
+       */
+      GaussianClusterModel();
+
+      /**
+       * Destructor.
+       */
+      virtual ~GaussianClusterModel();
+
+      void setYMax(double yMax);
+      void setTMax(gcp::util::Temperature tMax);
+      void setSigma(gcp::util::Angle sigma);
+      void setFwhm(gcp::util::Angle fwhm);
+
+      virtual void fillSzImage(gcp::util::Image& image, gcp::util::Frequency& frequency);
+
+    private:
+      
+      double yMax_;
+      gcp::util::Temperature tMax_;
+      gcp::util::Angle sigma_;
+      gcp::util::Image::Units units_;
+
+    }; // End class GaussianClusterModel
+    
+  } // End namespace models
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_MODELS_GAUSSIANCLUSTERMODEL_H

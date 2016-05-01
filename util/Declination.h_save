@@ -1,0 +1,68 @@
+// $Id: Declination.h,v 1.3 2012/05/02 23:44:51 eml Exp $
+
+#ifndef GCP_UTIL_DECLINATION_H
+#define GCP_UTIL_DECLINATION_H
+
+/**
+ * @file Declination.h
+ * 
+ * Tagged: Fri Jun 15 16:44:12 PDT 2007
+ * 
+ * @version: $Revision: 1.3 $, $Date: 2012/05/02 23:44:51 $
+ * 
+ * @author Erik Leitch.
+ */
+#include "gcp/util/DecAngle.h"
+
+namespace gcp {
+  namespace util {
+
+    class Declination : public DecAngle {
+    public:
+
+      /**
+       * Constructor.
+       */
+      Declination();
+
+      /**
+       * Destructor.
+       */
+      virtual ~Declination();
+
+      void addRadians(double radians);
+
+      /** 
+       * Add an angle to this declination
+       */
+      Declination operator+(Angle& angle) {
+	Declination sum;
+	sum.setRadians(val_);
+	sum.addRadians(angle.radians());
+	return sum;
+      }
+
+      /** 
+       * Subtract an angle from this declination
+       */
+      Declination operator-(Angle& angle) {
+	Declination sum;
+	sum.setRadians(val_);
+	sum.addRadians(-angle.radians());
+	return sum;
+      }
+
+      Declination operator=(DecAngle& angle) {
+	COUT("Inside operator=");
+	//	setRadians(angle.radians());
+      }
+
+    private:
+    }; // End class Declination
+
+  } // End namespace util
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_UTIL_DECLINATION_H

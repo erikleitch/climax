@@ -1,0 +1,1335 @@
+#include "gcp/fftutil/ImGen.h"
+#include "gcp/fftutil/Stokes.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/PtSrcGen.h"
+#include "gcp/util/Unit.h"
+
+#include "gcp/fftwc_src/fftw.h"
+#include "gcp/fftwr_src/rfftw.h"
+
+#include <string.h>
+
+using namespace std;
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+ImGen::ImGen() 
+{
+  required_  = P_NONE;
+  doZeroPad_ = false;
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+ImGen::~ImGen() {}
+
+/**.......................................................................
+ * Set the FWHM to use if generating from a gaussian spectrum
+ */
+void ImGen::setFwhm(double fwhm)
+{
+  fwhm_ = fwhm;
+  required_ |= P_FWHM;
+}
+
+/**.......................................................................
+ * If type_ = TYPE_POWER_LAW, this specifies the power-law index
+ */
+void ImGen::setPowInd(double powind)
+{
+  powind_ = powind;
+  required_ |= P_PIND;
+}
+
+/**.......................................................................
+ * If type_ = TYPE_FILE, this specifies the file
+ */
+void ImGen::setPowFile(std::string powfile)
+{
+  powfile_ = powfile;
+  required_ |= P_PFILE;
+}
+
+/**.......................................................................
+ * If type_ = TYPE_FILE, this specifies the type of spectra
+ * contained in the file
+ */
+void ImGen::setSpecType(unsigned specType)
+{
+  specType_ = specType;
+}
+
+/**.......................................................................
+ * Specify the l-value at which to normalize the power spectrum,
+ * and the band-power normalization of the power-law or gaussian
+ * power spectrum.
+ */
+void ImGen::setNormalization(double lnorm, Temperature tnorm)
+{
+  lnorm_ = lnorm;
+  tnorm_ = tnorm;
+  required_ |= P_NORM;
+}
+
+/**.......................................................................
+ * Specify whether or not to zeropad the array
+ */
+void ImGen::zeroPad(bool doZeroPad)
+{
+  doZeroPad_ = doZeroPad;
+}
+
+/**.......................................................................
+ * Specify the size of the square field to generate
+ */
+void ImGen::setImageSize(Angle size)
+{
+  size_ = size;
+  required_ |= P_SIZE;
+}
+
+/**.......................................................................
+ * Specify the number of pixels to generate
+ */
+void ImGen::setNpix(unsigned npix)
+{
+  // Convert to the nearest power of 2
+
+  npix_ = npix;
+  required_ |= P_NPIX;
+}
+
+/**.......................................................................
+ * Specify the type of power spectrum to use
+ */
+void ImGen::setPowerSpectrumType(Type type)
+{
+  type_ = type;
+  required_ |= P_TYPE;
+}
+
+void ImGen::checkGenericRequiredParameters() 
+{
+  bool inputError = false;
+
+  std::ostringstream os;
+  if(!(required_ & P_TYPE)) {
+    os << "You must specify the type of power spectrum: "
+      " use setPowerSpectrumType()\n";
+    inputError = true;
+  }
+
+  if(!(required_ & P_SIZE)) {
+    os << "You must specify the angular size of the field to generate: "
+      " use setImageSize()\n";
+    inputError = true;
+  }
+
+  if(!(required_ & P_NPIX)) {
+    os << "You must specify the number of pixels in the generated image: "
+      " use setNpix()\n";
+    inputError = true;
+  }
+
+  if(inputError) {
+    ThrowError(os.str());
+  }
+}
+
+void ImGen::setupForGauss() 
+{
+  bool inputError = false;
+
+  std::ostringstream os;
+  if(!(required_ & P_FWHM)) {
+    os << "You must specify the Gaussian fwhm: use setFwhm()\n";
+    inputError = true;
+  }
+
+  if(!(required_ & P_NORM)) {
+    os << "You must specify the power-law normalization: use setNormalization()\n";
+    inputError = true;
+  }
+
+  if(inputError) {
+    ThrowError(os.str());
+  }
+}
+
+void ImGen::setupForPowerLaw() 
+{
+  bool inputError = false;
+  std::ostringstream os;
+
+  if(!(required_ & P_PIND)) {
+    os << "You must specify the power-law index: use setPowInd()\n";
+    inputError = true;
+  }
+
+  if(!(required_ & P_NORM)) {
+    os << "You must specify the power-law normalization: use setNormalization()\n";
+    inputError = true;
+  }
+
+  if(inputError) {
+    ThrowError(os.str());
+  }
+}
+
+/**.......................................................................
+ * Read a file containing a power spectrum specification
+ */
+void ImGen::setupForFile() 
+{
+  if(!(required_ & P_PFILE)) {
+    ThrowError("You must specify the power-spectrum file: use setPowFile()");
+  }
+}
+
+/**.......................................................................
+ * Check inputs for point-source image generation
+ */
+void ImGen::setupForPtSrc() 
+{
+  bool inputError = false;
+  std::ostringstream os;
+
+  if(!(required_ & P_DNDS)) {
+    os << "You must specify dNdS: use setDnDs()\n";
+    inputError = true;
+  }
+
+  // If no minimum flux was specified, calculate the minimum flux from
+  // the confusion limit
+
+  if(!(required_ & P_FMIN)) {
+    double sqarcmin = size_.arcmin()/npix_;
+    SolidAngle area(SolidAngle::SqArcMinutes(), sqarcmin*sqarcmin);
+    fluxMin_ = ptSrcGen_.confusionLimit(area);
+    COUT("Warning: no minimum flux was specified: using the confusion limit Sc = " << fluxMin_ << std::endl);
+  }
+
+  if(inputError) {
+    ThrowError(os.str());
+  }
+}
+
+/**.......................................................................
+ * Generate the image(s)
+ */
+void ImGen::generateImages(std::string specTypeIn)
+{
+  //------------------------------------------------------------
+  // Sanity check for generic required parameters
+  //------------------------------------------------------------
+  
+  checkGenericRequiredParameters();
+  
+  //------------------------------------------------------------
+  // Sanity check for specific required parameters
+  //------------------------------------------------------------
+  
+  switch (type_) {
+  case TYPE_GAUSSIAN:
+    setupForGauss();
+    break;
+    
+  case TYPE_POWER_LAW:
+    setupForPowerLaw();
+    break;
+    
+  case TYPE_FILE:
+    setupForFile();
+    break;
+    
+  case TYPE_PTSRC:
+    setupForPtSrc();
+    break;
+
+  default:
+    ThrowError("Unrecognized type");
+  }
+
+  if(type_ == TYPE_PTSRC) {
+    generatePtSrcImage();
+  } else {
+    generateImagesDASI(specTypeIn);
+  }
+}
+
+void ImGen::generatePtSrcImage()
+{
+  std::vector<Flux>  srcFluxes;
+  std::vector<Angle> srcXPositions;
+  std::vector<Angle> srcYPositions;
+  
+  if(required_ & P_FMAX) {
+    ptSrcGen_.generateSources(fluxMin_, fluxMax_, size_, size_,
+				srcFluxes,
+				srcXPositions,
+				srcYPositions,
+				true);
+  } else {
+    ptSrcGen_.generateSources(fluxMin_, size_, size_,
+			      srcFluxes,
+			      srcXPositions,
+			      srcYPositions,
+			      true);
+  }
+
+  std::vector<float> data;
+  data.resize(npix_ * npix_);
+
+  Angle dPix = size_ / npix_;
+
+  unsigned ix, iy, ind;
+  for(unsigned i=0; i < srcFluxes.size(); i++) {
+    ix = (int)(srcXPositions[i].radians() / dPix.radians()) + npix_/2;
+    iy = (int)(srcYPositions[i].radians() / dPix.radians()) + npix_/2;
+    data[iy * npix_ + ix] += srcFluxes[i].Jy();
+  }
+
+  images_.resize(1);
+  images_[0].initializeFromArray(data, Unit::UNITS_JY);
+  images_[0].xAxis().setNpix(npix_);
+  images_[0].yAxis().setNpix(npix_);
+
+}
+
+void ImGen::generateImagesDASI(std::string specTypeIn)
+{
+  typedef struct {
+    float *t;
+    float *e;
+    float *b;
+  } Trans;
+  static Trans trans={NULL,NULL,NULL};
+  float *px=NULL,*pt=NULL; /* Arrays for reading a T spectrum from a file. */
+  float *pe=NULL,*pb=NULL,*pet=NULL;/* Arrays for reading E, B and T-E */
+  float *cf=NULL;          /* And array for storing the correlation coefficient
+			      between T and E variates */
+  float norm=1;            /* A normalization for the power spectrum. */
+  int waserr=0,badpt=0,nl=0,i,j;
+  char line[200];          /* A work buffer for reading from a file. */
+  FILE *fp=NULL;
+  double u,v,du,dv,vmin,l,dl,fl,phi;
+  double t_fac, e_fac, cf_fac, b_fac;
+  int il,ih;
+  int n[2];
+  rfftwnd_plan plan_inv=NULL;
+
+#ifdef IMGEN_DEBUG
+  rfftwnd_plan plan=NULL;
+#endif
+
+  int ngrid,ndata;
+  int nneg=0;
+  double sq2 = sqrt(2.0);
+  float cellsize,size,sigma;
+  double powind=0; /* Default to white noise */
+  char *fstring=NULL;
+  typedef enum {
+    S_GAUSS,
+    S_POW,
+    S_FILE,
+  } Stype;
+  Stype type;
+  typedef enum {
+    SPEC_T  =0,
+    SPEC_E  =1,
+    SPEC_B  =2,
+    SPEC_TE =3,
+    SPEC_TEB=4,
+    SPEC_IQU=5
+  } Spectype;
+  Spectype spectype=SPEC_T; /* Default to just generating T */
+  int istart=0,jstart=0;
+  bool zeropad=false;
+  float l_norm=10, T_norm=30;
+  float sig=0.0,fwhm=0.0;
+  int nim=1;
+  std::vector<float> data;
+  enum {
+    T=0x1,
+    E=0x2,
+    B=0x4,
+  };
+  unsigned mask=T;
+  bool B_ispresent = false;
+
+  trans.t = NULL;
+  trans.e = NULL;
+  trans.b = NULL;
+
+  /*
+   * Normalization of the power spectrum
+   */
+  l_norm = lnorm_;
+  T_norm = tnorm_.K()*1e6;
+  /*
+   * Optional zeropadding.
+   */
+  zeropad = doZeroPad_;
+
+  /*
+   * Parse arguments
+   */
+  /*
+   * Gaussian power spectrum
+   */
+  if(type_ == TYPE_GAUSSIAN)
+    type = S_GAUSS;
+  /*
+   * Power law
+   */
+  else if(type_ == TYPE_POWER_LAW) {
+    type = S_POW;
+    powind = powind_;
+  }
+  /*
+   * Power spectrum from a file
+   */
+  else {
+
+    if((fp=fopen(powfile_.c_str(),"r"))==NULL) {
+      ThrowError("Unable to open file: " << powfile_);
+    }
+
+    type = S_FILE;
+
+    {
+      char* type = (char*)specTypeIn.c_str();
+      
+      if(strcasecmp(type,"T")==0) {
+	spectype = SPEC_T;
+	mask = T;
+      }
+      else if(strcasecmp(type,"E")==0) {
+	spectype = SPEC_E;
+	mask = E;
+      }
+      else if(strcasecmp(type,"B")==0) {
+	spectype = SPEC_B;
+	mask = B;
+      }
+      else if(strcasecmp(type,"TE")==0) {
+	spectype = SPEC_TE;
+	mask = T|E;
+      }
+      else if(strcasecmp(type,"TEB")==0) {
+	spectype = SPEC_TEB;
+	mask = T|E|B;
+      }
+      else if(strcasecmp(type,"IQU")==0) {
+	spectype = SPEC_IQU;
+	mask = T|E|B;
+      }
+      else {
+	ThrowError("Unrecognized type: " << type);
+      }
+    }
+    /*
+     * Figure out how many images we will be outputting
+     */
+    if(spectype==SPEC_TE)
+      nim = 2;
+    else if(spectype==SPEC_TEB || spectype==SPEC_IQU)
+      nim = 3;
+  }
+  
+  // Get the field size in degrees, and convert to radians.
+
+  size  = size_.radians();
+
+  ndata = (int)pow((float)2.0f, (float)floor((log((double)npix_)/log(2.0)+0.5)));
+
+  // Resize our utility array now
+
+  data.resize(ndata*ndata);
+
+  ngrid=ndata;
+
+  if(zeropad) {
+    ngrid = 2*ndata;
+    istart = ngrid/4;
+    jstart = ngrid/4;
+  }
+  n[0] = n[1] = ngrid;
+  cellsize = size/ndata;
+  
+  // The resolution is set by the angular resolution and # of pixels
+  // of the desired image.
+
+  du = 1.0/(ngrid*cellsize);
+  dv = 1.0/(ngrid*cellsize);
+  
+  // The critical sampling frequency in the UV plane is set by the
+  // angular resolution of the desired image.  This is the value of v
+  // corresponding to the edge of the array.
+
+  vmin = -1.0/(2*cellsize);
+
+    // Try to allocate the array we will use for computing the
+  // transform.
+
+  if(mask & T)
+
+    if((trans.t=((float *)malloc(sizeof(float)*(ngrid*(ngrid+2)))))
+       ==NULL) {
+      ThrowError("imgen_fn: Unable to allocate transform array");
+    }
+
+  /*
+   * Allocate the E array too if we are generating that
+   */
+  if(mask & E)
+    if((trans.e=((float *)malloc(sizeof(float)*(ngrid*(ngrid+2)))))
+       ==NULL) {
+      ThrowError("imgen_fn: Unable to allocate transform array");
+    }
+  if(mask & B)
+    if((trans.b=((float *)malloc(sizeof(float)*(ngrid*(ngrid+2)))))
+       ==NULL) {
+      ThrowError("imgen_fn: Unable to allocate transform array");
+    }
+
+  
+  // Zero the data array(s).
+
+  if(trans.t)
+    for(i=0;i < ngrid*(ngrid+2);i++) 
+      trans.t[i] = 0.0;
+  if(trans.e)
+    for(i=0;i < ngrid*(ngrid+2);i++) 
+      trans.e[i] = 0.0;
+  if(trans.b)
+    for(i=0;i < ngrid*(ngrid+2);i++) 
+      trans.b[i] = 0.0;
+
+  // Generate a plan for the inverse transform.
+
+  if((plan_inv=rfftwnd_create_plan(2, n, FFTW_COMPLEX_TO_REAL,
+				   FFTW_ESTIMATE | FFTW_IN_PLACE))==NULL)
+    waserr = 1;
+
+  if(!waserr) {
+    
+    // If the power spectrum is in a file, try to read it now.
+
+    switch(type) {
+    case S_FILE:
+      if((fp = fopen(powfile_.c_str(),"r"))==NULL) {
+	ThrowError("Unable to open file: " << powfile_);
+      }
+      
+      // Try to allocate the arrays needed to read the file. First
+      // count the lines in the file.
+
+      for(nl=0;fgets(line,200,fp)!=NULL;nl++);
+      {
+	char linetmp[200], *lptr=NULL;
+	int ncol=1;
+
+	(void) strcpy(linetmp, line);
+	lptr = strtok(linetmp, " \n");
+	while(strtok(NULL, " \n") != NULL)
+	  ncol++;
+
+	COUT("Found " << ncol << " columns");
+	COUT("\tAssuming file contains: l T E " << (ncol==5 ? "B " : "")  << " TE");
+
+	if(ncol==5)
+	  B_ispresent = true;
+      }      
+
+      waserr |= (px =(float *)malloc(nl*sizeof(float)))==NULL;
+      waserr |= (pt =(float *)malloc(nl*sizeof(float)))==NULL;
+      waserr |= (pe =(float *)malloc(nl*sizeof(float)))==NULL;
+      waserr |= (pb =(float *)malloc(nl*sizeof(float)))==NULL;
+      waserr |= (pet=(float *)malloc(nl*sizeof(float)))==NULL;
+      waserr |= (cf =(float *)malloc(nl*sizeof(float)))==NULL;
+      
+      if(!waserr) {
+	rewind(fp);
+	for(nl=0;!waserr && fgets(line,200,fp)!=NULL;nl++) {	  
+	  
+	  // Read all columns from the file:
+	  // These should be:
+	  //
+	  //       l T E TE
+
+	  px[nl]  = atof(strtok(line," \t"));
+	  pt[nl]  = atof(strtok(NULL," \t"));
+	  pe[nl]  = atof(strtok(NULL," \t"));
+	  
+	  // Read B if present
+
+	  if(B_ispresent) {
+	    pb[nl]  = atof(strtok(NULL," \t"));
+	    pet[nl] = atof(strtok(NULL," \t\n"));
+	  } else {
+	    pb[nl]  = 0.0;
+	    pet[nl] = atof(strtok(NULL," \t\n"));
+	  }
+	  
+	  // Set any negative powers to zero -- this used to be an
+	  // accuracy problem with cmbfast when it got to high-l
+	  // Obviously we can't check simply for this in the T-E
+	  // correlations (pet), since these can be negative.
+
+	  if(pt[nl] < 0) {
+	    pt[nl] = 0.0;
+	    ++nneg;
+	  }
+
+	  if(pe[nl] < 0) {
+	    pe[nl] = 0.0;
+	    ++nneg;	 
+	  }
+
+	  if(pb[nl] < 0) {
+	    pb[nl] = 0.0; 
+	    ++nneg;
+	  }
+	  
+	  // Now scale to muK.  Cmbfast output is l(l+1)C_l/(2*pi),
+	  // in units of T_cmb^2
+	  // 
+	  // We want to convert these to C_l, in uK.
+
+	    pt[nl]  = sqrt(2*M_PI*pt[nl]/(px[nl]*(px[nl]+1)))*1e6*2.726;
+	    pe[nl]  = sqrt(2*M_PI*pe[nl]/(px[nl]*(px[nl]+1)))*1e6*2.726;
+	    pb[nl]  = sqrt(2*M_PI*pb[nl]/(px[nl]*(px[nl]+1)))*1e6*2.726;
+	    
+	    // The TE covariance can be negative -- don't take the
+	    // square root of this, but convert it to muK^2
+
+	    pet[nl] = (2*M_PI*pet[nl]/(px[nl]*(px[nl]+1)))*1e6*2.726*1e6*2.726;
+	    
+	    // If we are generating TE correlations, we'll do it by
+	    // generating two random variates r1 and r2.  Each element
+	    // of the transform is then given by:
+	    //
+	    //    T_i(l) = r1_i + a*r2_i
+	    //    E_i(l) = r2_i + a*r1_i
+	    //
+	    // so that:
+	    //
+	    //   <T^2> = V1 + a^2 V2
+	    //   <E^2> = V2 + a^2 V1
+	    //   <TE>  = a(V1 + V2)
+	    //
+	    // These equations must be solved for V1, V2 and a at each
+	    // l.
+
+	    if(mask&T && mask&E) {
+	      double vt,ve,cv,vtm,vem;
+	      double coeff,a;
+	      vt = pt[nl]*pt[nl];
+	      ve = pe[nl]*pe[nl];
+	      cv = pet[nl];
+	      
+	      // Now solve for the coefficients we'll need to generate
+	      // correlated TE maps
+
+	      a = cv/(ve+vt);
+
+	      // Note that when the correlation goes to zero, a --> 0,
+	      // and the positive root diverges (1 + 1)/(2*0) --> inf
+	      // however the negative root does not.  Setting delta =
+	      // 4C^2, if we Taylor expand about 1, keeping only the
+	      // first two terms (higher order terms go to zero even
+	      // faster), we get:
+	      //
+	      //          2 1/2                2
+	      // (1-(1-4*C )   )    1 - (1 - 2C  )
+	      // --------------- ~  -------------- = C --> 0 as a --> 0
+	      //      2C                 2C
+	      //
+
+	      if(fabs(a) > 0.5) {
+		ThrowError("Received |V12/(V11 + V22)| > 0.5");
+	      } else if(a==0.0) { /* Protect against divide by zero
+				     where <TE> crosses zero. */
+		coeff = 0.0;
+	      } else
+		coeff = (1.0 - sqrt(1.0-4*a*a))/(2*a);
+
+	      if(!waserr) {
+		vtm = (vt - coeff*cv)/(1-coeff*coeff);
+		vem = (ve - coeff*cv)/(1-coeff*coeff);
+		
+		// Install the modified variance in the pt and pe
+		// arrays Store the T and E as rms, since we'll need
+		// these to pass to gauss_rand().
+
+		pt[nl] = sqrt(vtm);
+		pe[nl] = sqrt(vem);
+		cf[nl] = coeff;
+	      }
+	    }
+	}
+
+	fclose(fp);
+      }
+
+      break;
+
+    case S_GAUSS:
+      
+      // Convert FWHM to sigma_l
+
+      sigma = fwhm_/sqrt(8*log(2.0));
+      norm = sqrt(T_norm*T_norm*2*M_PI/(l_norm*(l_norm+1)))*
+	exp(l_norm*l_norm/(4*sigma*sigma));
+
+      break;
+
+    case S_POW:
+      
+      // Compute the prefactor required to normalize a power-law
+      // spectrum.
+
+      norm = sqrt(T_norm*T_norm*2*M_PI/(l_norm*(l_norm+1)))*
+	pow((double)l_norm, (double)-powind/2);
+
+      fprintf(stdout, "norm = %f, T_norm = %f l_norm = %f powind = %f\n",
+              norm, T_norm, l_norm, powind);
+
+      break;
+    }
+    
+    // Now compute the power spectrum
+
+    if(!waserr) {
+      
+      // Since the array is conjugate symmetric, we are only filling
+      // the half plane; UV radius is 0 at the left center of the
+      // array, and increases towards the right.
+      //
+      // In the complex array, i ranges from 1 to N/2 + 1, and j
+      // ranges from 1 to N/2.
+
+      {
+	fftw_complex *t_complx = (fftw_complex *)trans.t;
+	fftw_complex *e_complx = (fftw_complex *)trans.e;
+	fftw_complex *b_complx = (fftw_complex *)trans.b;
+	int ind;
+	float siguv = sig > 0.0 ? 1.0/(2*M_PI*sig) : 0.0;
+	float wt;
+
+	
+	// Fill the whole thing
+
+	for(j=0;j < ngrid;j++) {
+	  for(i=0;i < ngrid/2+1;i++) {
+	    
+	    // Compute u,v and l for this pixel.  1) Zero frequency
+	    // occurs at the center of the 0th pixel.  2) Positive
+	    // frequencies go from pixel 1 --> n/2-1 3) +- Critical
+	    // frequency 1/(2*dx) is n/2 4) Negative frequencies go
+	    // from pixel n/2+1 --> n-1
+
+	    u = du*i;
+	    v = vmin + dv*j;
+	    l = 2*M_PI*sqrt(u*u + v*v);
+	    ind = j*(ngrid/2+1) + i;
+	    
+	    // Store the angle of the l vector, for use in generating
+	    // Q and U from E and B
+
+	    phi = -atan2(v,u) + M_PI/2;
+	    
+	    // If convolving, generate an appropriate weight here
+
+	    wt = siguv > 0.0 ? gauss2d(u,0.0,v,0.0,siguv,siguv,0.0) : 1.0;
+	    
+	    // In all cases, normalize the amplitude of the power
+	    // spectrum to be 30 (assumed uK) at l = 10 (COBE).
+
+	    switch (type) {
+	    case S_POW:
+	      t_fac = pow((double)l, (double)powind/2)*norm;
+	      break;
+	    case S_GAUSS:
+	      
+	      // This is the square root of the gaussian envelope.
+
+	      t_fac = exp(-l*l/(4*sigma*sigma))*norm;
+	      break;
+
+	    case S_FILE:
+	      
+	      // Else do a look-up of the value of the power spectrum
+	      // in the arrays read in from a file.
+
+	      dl = (px[nl-1]-px[0])/(nl-1);
+	      fl = (l-px[0])/dl;   /* The approximate "pixel" value */
+	      il = (int)floor(fl); /* The low bracketing value. */
+	      ih = (int)ceil(fl);  /* The high bracketing value. */
+	      
+	      // Now interpolate the power spectrum
+
+	      if(il >= 0 && ih < nl) {
+		if(mask & T)
+		  t_fac = pt[il] + (pt[ih] - pt[il])/dl*(l-px[il]);
+		if(mask & E)
+		  e_fac = pe[il] + (pe[ih] - pe[il])/dl*(l-px[il]);
+		if(mask & B)
+		  b_fac = pb[il] + (pb[ih] - pb[il])/dl*(l-px[il]);
+		
+		// Store the interpolated correlation coefficient as
+		// well.
+
+		cf_fac = cf[il] + (cf[ih] - cf[il])/dl*(l-px[il]);
+
+	      } else { /* If we couldn't interpolate, zero the power */
+		
+		// Only increment the out-of-range counter if this is
+		// not the zero-frequency bin.
+
+		if(!(i==0 && j==ngrid/2))
+		  badpt++;
+		  
+		if(badpt % 1000) {
+		  COUT("Couldn't interpolate for: l = " << l);
+		}
+
+		t_fac = 0.0;
+		e_fac = 0.0;
+		b_fac = 0.0;
+	      }
+	      break;
+	    }
+	    
+	    // Scale by the resolution.
+
+	    t_fac *= sqrt(du*dv);   
+	    e_fac *= sqrt(du*dv);   
+	    b_fac *= sqrt(du*dv);   
+	    
+	    // Correct for the fact that each of the Re and Im
+	    // components only contributes half of the total variance
+	    // in each mode.
+
+	    t_fac /= sq2; 
+	    e_fac /= sq2; 
+	    b_fac /= sq2; 
+	    
+	    // Generate Gaussian random deviates, multiplying every
+	    // other complex point by -1 to shift the image to the
+	    // center.
+
+	    if(mask==T) { /* If generating T alone */
+	      t_complx[ind].re = gauss_rand(t_fac)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+	      t_complx[ind].im = gauss_rand(t_fac)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+	    }
+
+	    if(mask==E) {  /* If generating E alone */
+	      e_complx[ind].re = gauss_rand(e_fac)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+	      e_complx[ind].im = gauss_rand(e_fac)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;	    
+	    }
+
+	    if(mask & B) { /* If generating B */
+	      b_complx[ind].re = gauss_rand(b_fac)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+	      b_complx[ind].im = gauss_rand(b_fac)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;	    
+	    }
+	    
+	    // If T-E together, include the proper correlations
+
+	    if(mask&T && mask&E) {
+	      float t_re,t_im,e_re,e_im;
+
+	      t_re = gauss_rand(t_fac);
+	      t_im = gauss_rand(t_fac);
+
+	      e_re = gauss_rand(e_fac);
+	      e_im = gauss_rand(e_fac);
+	      
+	      // Install the correlated random variates in the
+	      // appropriate arrays
+
+	      t_complx[ind].re = (t_re + cf_fac*e_re)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+	      t_complx[ind].im = (t_im + cf_fac*e_im)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+		
+	      e_complx[ind].re = (e_re + cf_fac*t_re)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;
+	      e_complx[ind].im = (e_im + cf_fac*t_im)*(j%2==0 ? 1 : -1)*
+		(i%2==0 ? 1 : -1)*wt;	    
+	    }
+	    
+	    // If converting from E-B to Q-U, do it now.
+	    //
+	    // In the small angle approximation, Q(l) and U(l) are given
+	    // by:
+	    //
+	    //   Q(l) = E(l)*cos(2*phi_l) - B(l)*sin(2*phi_l) U(l) =
+	    //   E(l)*sin(2*phi_l) + B(l)*cos(2*phi_l)
+	    //
+
+	    if(spectype==SPEC_IQU) {
+	      float e_re, e_im;
+	      float b_re, b_im;
+	      double c2phi = cos(2*phi);
+	      double s2phi = sin(2*phi);
+	      
+	      // Extract the E and B variates we've already generated
+
+	      e_re = e_complx[ind].re;
+	      e_im = e_complx[ind].im;
+	      b_re = b_complx[ind].re;
+	      b_im = b_complx[ind].im;
+	      
+	      // Now overwrite the E and B arrays with Q and U
+
+	      e_complx[ind].re = e_re*c2phi - b_re*s2phi;
+	      e_complx[ind].im = e_im*c2phi - b_im*s2phi;
+
+	      b_complx[ind].re = e_re*s2phi + b_re*c2phi;
+	      b_complx[ind].im = e_im*s2phi + b_im*c2phi;
+	    }
+	  }
+	}
+
+	// Set the zero-frequency point to 0 so that the sum of the
+	// image pixels will be 0
+
+	ind = (ngrid/2)*(ngrid/2+1) + 0; 
+
+	if(mask & T) {
+	  t_complx[ind].re = 0.0;
+	  t_complx[ind].im = 0.0;
+	}
+
+	if(mask & E) {
+	  e_complx[ind].re = 0.0;
+	  e_complx[ind].im = 0.0;
+	}
+
+	if(mask & B) {
+	  b_complx[ind].re = 0.0;
+	  b_complx[ind].im = 0.0;
+	}
+      }
+
+#ifdef IMGEN_DEBUG
+      {
+	int nx=ngrid+2,ny=ngrid;
+	fprintf(stdout,"Plotting E and B after setting the zero frequency pixel\n");
+	
+	// Plot the E and B transforms
+
+	waserr=v_grey2(nx*ny, etrans, nx, ny, 0, nx-1, 0, ny-1, NULL, 0.0,0.0, " ", " ", " ", " ");
+	waserr=v_grey2(nx*ny, btrans, nx, ny, 0, nx-1, 0, ny-1, NULL, 0.0,0.0, " ", " ", " ", " ");
+      }
+#endif
+
+      // Now transform back to the image plane
+
+      if(!waserr) {
+	if(mask & T) {
+	  (void)rfftwnd_one_complex_to_real(plan_inv, 
+					    (fftw_complex *)trans.t, NULL); 
+	}
+
+	if(mask & E) {
+	  (void)rfftwnd_one_complex_to_real(plan_inv, 
+					    (fftw_complex *)trans.e, NULL); 
+	}
+
+	if(mask & B) {
+	  (void)rfftwnd_one_complex_to_real(plan_inv, 
+					    (fftw_complex *)trans.b, NULL); 
+	}
+      }
+    }
+
+#ifdef IMGEN_DEBUG
+    {
+      float q_re, q_im;
+      float u_re, u_im;
+      double c2phi;
+      double s2phi;
+      int ind;
+      int nx=ngrid+2,ny=ngrid;
+
+      fftw_complex* q_complx = (fftw_complex*) trans.e;
+      fftw_complex* u_complx = (fftw_complex*) trans.b;
+      fftw_complex* ecomplx  = (fftw_complex*) etrans;
+      fftw_complex* bcomplx  = (fftw_complex*) btrans;
+      
+      // Take the reverse transform of the E and B images and recover
+      // the B transform
+
+      if(mask & E)
+	(void)rfftwnd_one_real_to_complex(plan, 
+					  (fftw_real *)trans.e, NULL); 
+      if(mask & B)
+	(void)rfftwnd_one_real_to_complex(plan, 
+					  (fftw_real *)trans.b, NULL); 
+      for(j=0;j < ngrid;j++)
+	for(i=0;i < ngrid/2+1;i++) {
+	  
+	  // Compute u,v and l for this pixel.  Zero frequency occurs
+	  // at the center of the 0th pixel.  Positive frequency go
+	  // from 1 --> n/2-1 +- Critical frequency 1/(2*dx) is n/2
+	  // Negative frequency goes from n/2+1 --> n-1
+
+	  u   = du*i;
+	  v   = vmin + dv*j;
+	  l   = 2*M_PI*sqrt(u*u + v*v);
+	  ind = j*(ngrid/2+1) + i;
+	  
+	  // Store the angle of the l vector, for use in generating Q
+	  // and U from E and B
+
+	  phi   = -atan2(v,u)+pi/2;
+	  c2phi =  cos(2*phi);
+	  s2phi =  sin(2*phi);
+
+	  q_re = q_complx[ind].re;
+	  q_im = q_complx[ind].im;
+	  u_re = u_complx[ind].re;
+	  u_im = u_complx[ind].im;
+
+	  ecomplx[ind].re -= (q_re*c2phi + u_re*s2phi)*(j%2==0 ? 1 : -1)*
+	    (i%2==0 ? 1 : -1)/(nx*ny);
+	  ecomplx[ind].im -= (q_im*c2phi + u_im*s2phi)*(j%2==0 ? 1 : -1)*
+	    (i%2==0 ? 1 : -1)/(nx*ny);
+
+	  bcomplx[ind].re -= (-q_re*s2phi + u_re*c2phi)*(j%2==0 ? 1 : -1)*
+	    (i%2==0 ? 1 : -1)/(nx*ny);
+	  bcomplx[ind].im -= (-q_im*s2phi + u_im*c2phi)*(j%2==0 ? 1 : -1)*
+	    (i%2==0 ? 1 : -1)/(nx*ny);
+	}
+      
+      // And plot it.
+
+      waserr=v_grey2(nx*ny, etrans, nx, ny, 0, nx-1, 0, ny-1, NULL, 0.0,0.0, " ", " ", " ", " ");
+      waserr=v_grey2(nx*ny, btrans, nx, ny, 0, nx-1, 0, ny-1, NULL, 0.0,0.0, " ", " ", " ", " ");
+    }
+#endif
+
+    // Emit any relevant error messages.
+
+    if(nneg > 0)
+      fprintf(stderr,"Warning: File %s contained %d negative points\n\n",
+	      fstring, nneg);
+    if(badpt > 0) {
+      fprintf(stderr,"Warning: Power spectrum %s extended from l = %.0f to l = %.0f.\n",
+	      fstring, px[0], px[nl-1]);
+      fprintf(stderr,"         %d visibilities were out of range and were set to 0.0\n",badpt);
+    }
+  }
+
+  // Fill the output array.
+
+  if(!waserr) {
+
+    int imind,ftind;
+
+    // Single image output
+
+    if(spectype==SPEC_T || spectype==SPEC_E || spectype==SPEC_B) {
+      
+      images_.resize(1);
+
+      float* transptr=NULL;
+
+      switch (spectype) {
+      case SPEC_T:
+	transptr = trans.t;
+	break;
+      case SPEC_E:
+	transptr = trans.e;
+	break;
+      case SPEC_B:
+	transptr = trans.b;
+	break;
+      default:
+	break;
+      }
+
+      for(i=0;i < ndata;i++) {
+	for(j=0;j < ndata;j++) {
+	  imind = i + j*ndata;
+	  ftind = i+istart + (j+jstart)*(ngrid+2);
+	  data[imind] = transptr[ftind]*(j%2==0 ? 1 : -1);
+	}
+      }
+
+      images_[0].initializeFromArray(data, Unit::UNITS_UK);
+      images_[0].xAxis().setNpix(ndata);
+      images_[0].yAxis().setNpix(ndata);
+
+    // Multiple image output
+
+    } else {
+    
+      unsigned nim = (mask & B) ? 3 : 2;
+      images_.resize(nim);
+
+      // Always output T
+
+      for(i=0;i < ndata;i++) {
+	for(j=0;j < ndata;j++) {
+	  imind = i + j*ndata;
+	  ftind = i+istart + (j+jstart)*(ngrid+2);
+	  data[imind] = trans.t[ftind]*(j%2==0 ? 1 : -1);
+	}
+      }
+
+      images_[0].initializeFromArray(data, Unit::UNITS_UK);
+      images_[0].xAxis().setNpix(ndata);
+      images_[0].yAxis().setNpix(ndata);
+
+      // Always output E (or Q)
+
+      for(i=0;i < ndata;i++) {
+	for(j=0;j < ndata;j++) {
+	  imind = i + j*ndata + ndata*ndata;
+	  ftind = i+istart + (j+jstart)*(ngrid+2);
+	  data[imind] = trans.e[ftind]*(j%2==0 ? 1 : -1);
+	}
+      }
+
+      images_[1].initializeFromArray(data, Unit::UNITS_UK);
+      images_[1].xAxis().setNpix(ndata);
+      images_[1].yAxis().setNpix(ndata);
+
+      // Sometimes output B (or U)
+
+      if(mask & B) {
+
+	for(i=0;i < ndata;i++) {
+	  for(j=0;j < ndata;j++) {
+	    imind = i + j*ndata + 2*ndata*ndata;
+	    ftind = i+istart + (j+jstart)*(ngrid+2);
+	    data[imind] = trans.b[ftind]*(j%2==0 ? 1 : -1);
+	  }
+	}
+
+	images_[2].initializeFromArray(data, Unit::UNITS_UK);
+	images_[2].xAxis().setNpix(ndata);
+	images_[2].yAxis().setNpix(ndata);
+
+      }
+    }
+  }
+  
+  // Free any memory allocated in this function.
+
+  if(px)
+    free(px);
+  if(pt)
+    free(pt);
+  if(pe)
+    free(pe);
+  if(pb)
+    free(pb);
+  if(pet)
+    free(pet);
+  if(cf)
+    free(cf);
+
+  /*
+   * Free the transform arrays
+   */
+  if(trans.t)
+    free(trans.t);
+  if(trans.e)
+    free(trans.e);
+  if(trans.b)
+    free(trans.b);
+
+// For some reason, this crashes matlab, so for now I leave it
+// as a memory leak instead
+
+#if 0 
+  if(plan_inv)
+    rfftwnd_destroy_plan(plan_inv);
+#endif
+}
+
+/**.......................................................................
+ * This function returns a random number, from a gaussian distribution
+ * of standard deviation, num.
+ */
+double ImGen::gauss_rand(double num)
+{
+  static double rrad;
+  static double aval, bval, rand_num;
+  /*
+   * Acquire two uniform random numbers between -1 and 1.
+   */
+  do {
+    aval=(double)(rand())/RAND_MAX*2-1;
+    bval=(double)(rand())/RAND_MAX*2-1;
+    /*
+     * The Box-Muller transformation to convert uniform to
+     * gaussian deviates requires that the two deviates be
+     * converted to a radius squared. The value of the radius
+     * must be less than one and not equal to zero.
+     */
+    rrad = aval*aval + bval*bval;
+  } while(rrad >= 1 || rrad == 0.0);
+  /*
+   * Apply the Box-Muller transformation to turn the random
+   * square radius found above into two Gaussian deviates.
+   */
+  rand_num = num * aval * sqrt(-2.0 * log((double) rrad)/rrad);
+  return rand_num;
+}
+
+/**.......................................................................
+ * Calculate a 2d elliptical gaussian
+ */
+double ImGen::gauss2d(float x, float x0, float y, float y0, 
+		      float sigmax, float sigmay, float phi)
+{
+  float val;
+  float a,b,atmp,btmp,cphi=cos(phi),sphi=sin(phi),gamma;
+  float xdiff=x-x0;
+  float ydiff=y-y0;
+  
+  a = 2.35482*sigmay;
+  b = 2.35482*sigmax;
+
+  atmp = (xdiff*cphi - ydiff*sphi)/b;
+  btmp = (xdiff*sphi + ydiff*cphi)/a;
+
+  gamma = atmp*atmp+btmp*btmp;
+
+  val = exp(-2.772588722*gamma);
+
+  return val;
+}
+
+//-----------------------------------------------------------------------
+// Utilities for determining image size
+//-----------------------------------------------------------------------
+
+/**-----------------------------------------------------------------------
+ * If we have regularly sampled data, sampled at intervals: 
+ *
+ *   x = k*dx, where k = {0, 1, ... N}
+ *
+ * then we sample Fourier space at frequencies:
+ *
+ *   f = n/(N*dx), where n = {-N/2, ..., N/2}
+ *
+ * I.e., our resolution in Fourier space is set by the maximum extent
+ * of the sampled data:
+ *
+ *   df = 1/(N*dx),
+ * 
+ * and our maximum sampled frequency is set by the resolution in image
+ * space:
+ *
+ *   fmax = N/2 * df = 1/(2*dx)
+ *
+ * For example, if we have an image that is 0.5 degrees on a side,
+ * with 256 pixels, then:
+ *
+ *   dx = 3.4088e-05 radians, 
+ *
+ * and 
+ *
+ *   df = 1/(N*dx) = 1/(256*3.4088e-05) = 114.5916
+ *
+ * and 
+ *
+ *   fmax = 1/(2*dx) = 1/(2*3.4088e-05) = 1.4668e+04
+ *
+ * Note that padding your data array doesn't change the maximum
+ * frequency that you sample (it can't, since there's no additional
+ * information there), but it changes the frequency resolution.  That
+ * is,
+ *
+ *   df = 1/(2*N*dx) = 57.2958,
+ *
+ * but:
+ *
+ *   dmax = 2*N/2 * 1/(2*N*dx) = 1/(2*dx) = 1.4668e+04
+ */
+double ImGen::uvMax(Angle size, unsigned npix)
+{
+  unsigned ndata = (unsigned)pow((float)2.0f, (float)floor((log((double)npix)/log(2.0)+0.5)));
+  double cellsize = size.radians()/ndata;
+  return 1.0/(2 * cellsize);
+}
+
+double ImGen::lMax(Angle size, unsigned npix)
+{
+  return sqrt(2.0) * uvMax(size, npix);
+}
+
+Angle ImGen::maxSizeForUvMaxOf(double uvmax, unsigned npix)
+{
+  unsigned ndata = (unsigned)pow((float)2.0f, (float)floor((log((double)npix)/log(2.0)+0.5)));
+  double cellsize = 1.0/(2 * uvmax);
+  Angle size;
+  size.setRadians(cellsize * ndata);
+  return size;
+}
+
+Angle ImGen::maxSizeForlMaxOf(double lmax, unsigned npix)
+{
+  double uvmax = lmax / sqrt(2.0);
+  return maxSizeForUvMaxOf(uvmax, npix);
+}
+
+unsigned ImGen::npixForUvMaxOf(double uvmax, Angle size)
+{
+  double cellsize = 1.0/(2 * uvmax);
+  unsigned npix = (unsigned)(size.radians() / cellsize);
+  unsigned ndata = (unsigned)pow((float)2.0f, (float)floor((log((double)npix)/log(2.0)+0.5)));
+  return ndata;
+}
+
+unsigned ImGen::npixForlMaxOf(double lmax, Angle size)
+{
+  double uvmax = lmax / sqrt(2.0);
+  return npixForUvMaxOf(uvmax, size);
+}
+
+void ImGen::seed(unsigned int s)
+{
+  srand(s);
+}
+
+void ImGen::seedRandom()
+{
+  int r = rand();
+  srand((unsigned int)r);
+}
+
+void ImGen::setDnDs(double k, double gamma, Flux fu, SolidAngle au)
+{
+  ptSrcGen_.setDnDs(k, gamma, fu, au);
+  required_ |= P_DNDS;
+}
+
+void ImGen::setFluxMin(Flux fluxMin)
+{
+  fluxMin_ = fluxMin;
+  required_ |= P_FMIN;
+}
+
+void ImGen::setFluxMax(Flux fluxMax)
+{
+  fluxMax_ = fluxMax;
+  required_ |= P_FMAX;
+}

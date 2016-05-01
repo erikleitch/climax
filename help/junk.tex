@@ -1,0 +1,40 @@
+The GNFW profile gives $P(r)$ as a shape function $p(r)$ times a normalization \mathP500 that is completely determined by \mathM500:
+
+\begin{eqnarray}
+P(r) &=& 1.65\times10^{-3}h(z)^{8/3}\left[{\M500\over{3\times10^{14}h^{-1}_{70}\Msolar}}\right]^{2/3+\alpha_P}\\\nonumber
+&\times& p(r) \,h^2_{70}\,{\rm keV\,cm^{-3}},
+\end{eqnarray}
+
+For any radial model, the pressure can be integrated to give $Y_{\it sph}(R)$:
+
+\begin{eqnarray}
+Y_{\it sph}(R) &=& {{\sigma_T}\over{m_e c^2}}\integral{R}{0}{P(r)}{V}\\\nonumber
+\end{eqnarray}
+
+and similarly $\Mgas(R)$:
+
+\begin{eqnarray}
+\Mgas(R) &=& m_p\mu_e \left({{m_e c^2}\over{k_B T_e}}\right)\left({{1}\over{\sigma_T}}\right)Y_{\it sph}(R)\\\nonumber
+\label{eq:mgas}
+\end{eqnarray}
+
+What I am doing is using the self-similarity arguments that go into determining \mathP500 (and hence the normalization of $P(r)$ above) to compute \mathR500 from the input \mathM500:
+
+\begin{equation}
+\M500 = 500  \rho_c(z) {{4\pi}\over{3}}{\R500}^3
+\label{eq:r500}
+\end{equation}
+
+and the characteristic temperature:
+
+\begin{equation}
+k\T500 = \mu m_p {{G \M500}\over{2\R500}}
+\label{eq:t500}
+\end{equation}
+
+and calculating $M_{\it tot}(\R500) = {1\over{f_{gas}}}\Mgas(\R500)$ via Eq~\ref{eq:mgas}.  
+
+This is what I'm comparing to the input \mathM500 and determining that
+I have to apply that scale factor to make them agree.
+
+

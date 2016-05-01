@@ -1,0 +1,211 @@
+// $Id: ImGen.h,v 1.1.1.1 2010/07/13 17:56:32 eml Exp $
+
+#ifndef GCP_UTIL_IMGEN_H
+#define GCP_UTIL_IMGEN_H
+
+/**
+ * @file ImGen.h
+ * 
+ * Tagged: Mon Aug 18 23:47:55 PDT 2008
+ * 
+ * @version: $Revision: 1.1.1.1 $, $Date: 2010/07/13 17:56:32 $
+ * 
+ * @author Erik Leitch.
+ */
+#include "gcp/util/Angle.h"
+#include "gcp/util/Flux.h"
+#include "gcp/util/PtSrcGen.h"
+#include "gcp/util/SolidAngle.h"
+#include "gcp/util/Temperature.h"
+
+#include "gcp/fftutil/Image.h"
+
+#include <string>
+
+namespace gcp {
+  namespace util {
+
+    class ImGen {
+    public:
+
+      // Constructor.
+
+      ImGen();
+
+      // Destructor.
+
+      virtual ~ImGen();
+
+      // If type_ = TYPE_GAUSSIAN, this specifies the FWHM of the
+      // gaussian to use (in l-space)
+
+      void setFwhm(double fwhm);
+	
+      // If type_ = TYPE_POWER_LAW, this specifies the power-law index
+
+      void setPowInd(double powind);
+
+      // If type_ = TYPE_FILE, this specifies the filename from which
+      // to read the power spectrum
+
+      void setPowFile(std::string powfile);
+
+      // If type_ = TYPE_FILE, this specifies the type of spectra
+      // contained in the file
+
+      void setSpecType(unsigned specType);
+
+      // Specify the l-value at which to normalize the power spectrum,
+      // and the band-power normalization of the power-law or gaussian
+      // power spectrum.
+
+      void setNormalization(double lnorm, Temperature tnorm);
+
+      // Set point-source parameters for point source images
+
+      void setDnDs(double k, double gamma, gcp::util::Flux fu, gcp::util::SolidAngle au);
+      void setFluxMin(gcp::util::Flux fluxMin);
+      void setFluxMax(gcp::util::Flux fluxMax);
+
+      // Specify whether or not to zeropad the array
+
+      void zeroPad(bool doZeroPad);
+
+      // Specify the size of the square field to generate
+
+      void setImageSize(Angle size);
+
+      // Specify the number of pixels to generate
+
+      void setNpix(unsigned npix);
+
+      enum Type {
+	TYPE_GAUSSIAN,  // A gaussian power spectrum
+	TYPE_POWER_LAW, // A power-law
+	TYPE_FILE,      // An arbitrary spectrum
+	TYPE_PTSRC,     // A point-source image
+      };
+
+      // Specify the type of power spectrum to use
+
+      void setPowerSpectrumType(Type type);
+
+      // Generate the image(s)
+
+      void generateImages(std::string specTypeIn);
+      void generatePtSrcImage();
+      void generateImagesDASI(std::string specTypeIn);
+
+      // Utilities for determining image size
+
+      static double uvMax(Angle size, unsigned npix);
+      static double lMax(Angle size, unsigned npix);
+      static Angle maxSizeForUvMaxOf(double uvmax, unsigned npix);
+      static Angle maxSizeForlMaxOf(double lmax, unsigned npix);
+      static unsigned npixForUvMaxOf(double uvmax, Angle size);
+      static unsigned npixForlMaxOf(double lmax, Angle size);
+
+      // This function returns a random number, from a gaussian
+      // distribution of standard deviation, num.
+      
+      static double gauss_rand(double num);
+
+      // Seed the random number generator with an explicit seed
+
+      void seed(unsigned int s);
+
+      // Seed the random number generator with a random seed
+
+      void seedRandom();
+
+    private:
+
+      void checkGenericRequiredParameters();
+      void setupForGauss() ;
+      void setupForPowerLaw(); 
+      void setupForFile(); 
+      void setupForPtSrc(); 
+      
+      // Calculate a 2d elliptical gaussian
+
+      double gauss2d(float x, float x0, float y, float y0, 
+		     float sigmax, float sigmay, float phi);
+
+      // The type of power spectrum to use in generating the image
+
+      Type type_;
+
+      // A mask of required parameters
+
+      enum {
+	P_NONE  =  0x0,
+	P_TYPE  =  0x1,
+	P_FWHM  =  0x2,
+	P_SIZE  =  0x4,
+	P_NPIX  =  0x8,
+	P_NORM  =  0x10,
+	P_PIND  =  0x20,
+	P_PFILE =  0x40,
+	P_DNDS  =  0x80,
+	P_FMIN  =  0x100,
+	P_FMAX  =  0x200,
+	P_PTYPE =  0x400,
+      };
+
+      unsigned required_;
+
+      unsigned specType_;
+
+      // True if zero-padding the array
+
+      bool doZeroPad_;
+
+      // If generating a Gaussian spectrum, the fwhm (in l-space)
+
+      double fwhm_;
+
+      // If generating a power-law spectrum, the power-law index (in
+      // l-space) to use
+
+      double powind_;
+
+      // Specify the filename from which to read the power spectrum
+
+      std::string powfile_;
+
+      // The power-spectrum normalization
+
+      double lnorm_;
+      Temperature tnorm_;
+
+      // The angular size of the field to generate
+
+      Angle size_;
+      Angle cellsize_;
+
+      // The number of pixels
+
+      unsigned npix_;
+
+      // The number of images to create
+
+      unsigned nim_; 
+
+      gcp::util::PtSrcGen ptSrcGen_;
+      gcp::util::Flux fluxMin_;
+      gcp::util::Flux fluxMax_;
+
+    public:
+
+      // The output images (there can be up to three)
+
+      std::vector<Image> images_;
+
+    }; // End class ImGen
+
+  } // End namespace util
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_UTIL_IMGEN_H

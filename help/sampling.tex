@@ -1,0 +1,46 @@
+\subsection{Sampling from multi-variate normal distributions with arbitrary correlations}
+
+The multi-variate distribution is given by:
+
+\begin{equation}
+p(\bar{x}) = {1\over{(2\pi)^{k/2}{|\tilde{C}|}^{1/2}}}\,{\exp{-{1\over{2}}{(\bar{x} - \bar{\mu})^T\tilde{C}^{-1}{(\bar{x} - \bar{\mu})}}}}
+\end{equation}
+
+If we write out the terms of the exponent $M \equiv (\bar{x} - \bar{\mu})^T\tilde{C}^{-1}(\bar{x} - \bar{\mu})$
+we have:
+
+\begin{equation}
+M = {x_k}^2 C_{kk} - 2x_k\mu_kC_{kk} + 2\sum_{i \neq k}{x_k(x_i - \mu_i)C_{ki}} + C_{kk}B_k
+\end{equation}
+
+where $B_k/C_{kk}$ represents all terms that don't depend on $x_k$. If we rewrite this as:
+
+\begin{eqnarray}
+M &=& C_{kk}{x_k}^2 + C_{kk}x_k\left(2\sum_{i \neq k}{(x_i - \mu_i)C_{ki}/C_{kk} - 2\mu_k}\right) + C_{kk}B_k\\
+  &=& C_{kk}{x_k}^2 + C_{kk}x_kA_k + C_{kk}B_k\\
+  &=& C_{kk}\left({x_k}^2 + x_kA_k + A_k^2/4\right) + C_{kk}\left(B_k - A_k^2/4\right) \\
+  &=& C_{kk}\left(x_k + A_k/2\right)^2 + C_{kk}\left(B_k - A_k^2/4\right) 
+\end{eqnarray}
+
+we see that if $\mu_k^\prime \equiv -A_k/2$, the exponent can be written, up to a constant factor, as:
+
+\begin{equation}
+M_k = C_{kk}\left(x_k - \mu_k^\prime\right)^2.  
+\end{equation}
+
+We see then that up to a normalization, the conditional distribution for
+$x_k$, $p(x_k|\{x_{i\neq k}\})$ is simply given by a univariate gaussian
+with:
+
+\begin{eqnarray}
+\mu_k^\prime &=& -A_k/2 \\
+\sigma_k   &=& 1/\sqrt{C_{kk}}
+\end{eqnarray}
+
+Our prescription for generating samples from the joint distribution is
+then to Gibbs sample from the univariate conditional distributions,
+starting from a random point, and iterating each time from the
+previous point.  The result is itself a Markov chain which
+collectively represents an unbiased sample from the joint
+distribution.
+

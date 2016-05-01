@@ -1,0 +1,133 @@
+#include "gcp/util/Temperature.h"
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+
+using namespace std;
+
+using namespace gcp::util;
+
+const double Temperature::kelvinZeroPointInC_ = 273.15;
+
+/**.......................................................................
+ * Constructor.
+ */
+Temperature::Temperature() 
+{
+  initialize();
+}
+
+/**.......................................................................
+ * Constructors.
+ */
+Temperature::Temperature(const Kelvin& units, double kelvin) 
+{
+  initialize();
+  setK(kelvin);
+}
+
+Temperature::Temperature(const MicroKelvin& units, double microKelvins) 
+{
+  initialize();
+  setMicroK(microKelvins);
+}
+
+Temperature::Temperature(const Centigrade& units, double centigrade) 
+{
+  initialize();
+  setC(centigrade);
+}
+
+Temperature::Temperature(const Celsius& units, double celsius) 
+{
+  initialize();
+  setC(celsius);
+}
+
+Temperature::Temperature(const Fahrenheit& units, double fahrenheit) 
+{
+  initialize();
+  setF(fahrenheit);
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+Temperature::~Temperature() {}
+
+void Temperature::setC(double centigrade)
+{
+  centigrade_ = centigrade;
+}
+
+void Temperature::setF(double fahrenheit)
+{
+  centigrade_ = (fahrenheit - 32.0) * 5.0/9;
+}
+
+void Temperature::setK(double kelvin)
+{
+  centigrade_ = kelvin - kelvinZeroPointInC_;
+}
+
+void Temperature::setMicroK(double microKelvin)
+{
+  setK(microKelvin * 1e-6);
+}
+
+double Temperature::C()
+{
+  return centigrade_;
+}
+
+double Temperature::F()
+{
+  return (9.0/5 * centigrade_ + 32.0);
+}
+
+double Temperature::K()
+{
+  return centigrade_ + kelvinZeroPointInC_;
+}
+
+double Temperature::microK()
+{
+  return K() / 1e-6;
+}
+
+void Temperature::initialize()
+{
+  setC(0.0);
+}
+
+void Temperature::Kelvin::addNames()
+{
+  COUT("Calling real addNames() method");
+
+  addName("Kelvin");
+  addName("kelvin");
+}
+
+/**.......................................................................
+ * Write the contents of this object to an ostream
+ */
+ostream& 
+gcp::util::operator<<(ostream& os, Temperature& temp)
+{
+  os << temp.K() << " K";
+  return os;
+}
+
+/** .......................................................................
+ * Add two Temperatures
+ */
+Temperature Temperature::operator+(Temperature& temp)
+{
+  Temperature sum;
+  sum.setC(centigrade_ + temp.C());
+  return sum;
+}
+
+Temperature Temperature::operator+(const Temperature& temp)
+{
+  return operator+((Temperature&) temp);
+}

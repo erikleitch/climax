@@ -1,0 +1,2735 @@
+#include "gcp/datasets/VisDataSet.h"
+
+#include "gcp/fftutil/Dft2d.h"
+#include "gcp/fftutil/FitsIoHandler.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/Delay.h"
+#include "gcp/util/Declination.h"
+#include "gcp/util/FitsBinTableReader.h"
+#include "gcp/util/HourAngle.h"
+#include "gcp/util/Sampler.h"
+#include "gcp/util/String.h"
+#include "gcp/util/Timer.h"
+#include "gcp/util/Wavelength.h"
+
+using namespace gcp::datasets;
+using namespace gcp::util;
+using namespace std;
+
+Mutex VisDataSet::VisExecData::dataAccessGuard_;
+
+double VisDataSet::wtScale_ = 1.0;
+
+//=======================================================================
+// Methods of VisDataSet
+//=======================================================================
+
+/**.......................................................................
+ * Constructor.
+ */
+VisDataSet::VisDataSet(gcp::util::ThreadPool* pool) 
+{
+  pool_                      = pool;
+  storeDataInternally_       = false;
+  releaseDataAfterReadin_    = true;
+  estimateErrInMeanFromData_ = false;
+  uvMin_                     = -1;
+  uvMax_                     = -1;
+
+  addParameter("perc",    DataType::DOUBLE);
+  addParameter("npix",    DataType::UINT);
+  addParameter("size",    DataType::DOUBLE);
+  addParameter("wtscale", DataType::DOUBLE);
+  addParameter("uvmin",   DataType::DOUBLE);
+  addParameter("uvmax",   DataType::DOUBLE);
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+VisDataSet::~VisDataSet() {}
+
+/**.......................................................................
+ * Configure for use as a simulator.
+ */
+void VisDataSet::setupForSimulation(bool sim)
+{
+  if(sim) {
+    storeDataInternallyOnReadin(true);
+    releaseDataAfterReadin(false);
+  } else {
+    releaseDataAfterReadin(true);
+  }
+}
+
+/**.......................................................................
+ * If true, store data internally on readin.  We may either want to do
+ * this because it is much faster when calculating moments to iterate
+ * over an internal copy of the data than to re-read the data from a
+ * file, or if simulating, so we have the original data to overwrite
+ * with simulated visibilities.
+ */
+void VisDataSet::storeDataInternallyOnReadin(bool store)
+{
+  storeDataInternally_ = store;
+}
+
+/**.......................................................................
+ * If true, release the internal copy of the data after moment
+ * calculation is complete.  If using for simulation, we don't want to
+ * do this!
+ */
+void VisDataSet::releaseDataAfterReadin(bool release)
+{
+  releaseDataAfterReadin_ = release;
+}
+
+/**.......................................................................
+ * Initialize this object from a file
+ */
+void VisDataSet::initializeFromFile(std::string fileName)
+{
+  // Initialize antenna information
+
+  initializeAntennaInformation(fileName);
+
+  // Initialize relevant header information from the file
+
+  openFileReader(fileName);
+
+  updateFrequencyInformation();
+
+  updateObservationInformation();
+
+  updateVisibilityInformation();
+
+  closeFileReader();
+
+  // Now print a summary of what we know, before reading the
+  // visibility data
+
+  printFileStats();
+
+  // And guess at the type of antennas
+
+  guessAtAntennaType();
+}
+
+/**.......................................................................
+ * Count the data by baseline
+ */
+void VisDataSet::countData(std::string fileName)
+{
+  // If we were told to store data internally, resize our internal
+  // array of groups to accomodate the data.
+
+  if(storeDataInternally_) {
+    obs_.visibilities_.resize(obs_.nGroup_);
+  }
+
+  // Now read through the file
+
+  unsigned badBaseline = 0;
+  unsigned badVis      = 0;
+
+  // First examine what we know about the antennas to determine how
+  // many unique baseline groupings there are.  
+
+  determineUniqueBaselineGroupings(obs_);
+
+  // Now read through the UVF file, counting how many baselines in
+  // each group were actually encountered, and storing the maximum UV
+  // radius, which will be used to determine how to compress the data,
+  // if compression is requested
+
+  openFileReader(fileName);
+
+  ObsInfo::Vis vis;
+  Wavelength wavelength;
+
+  for(unsigned iGroup=0; iGroup < obs_.nGroup_; iGroup++) {
+
+    getGroup(iGroup, vis);
+
+    // If we are storing data internally, save a copy in the
+    // visibility array
+
+    if(storeDataInternally_) 
+      obs_.visibilities_[iGroup] = vis;
+
+    // Find the baseline grouping to which this baseline belongs
+
+    unsigned baselineGroupIndex = aipsBaselineIndexToGroupIndexMap_[vis.baseline_];
+    VisBaselineGroup& group = baselineGroups_[baselineGroupIndex];
+
+    // Determine whether this visibility is valid
+
+    bool goodBaseline = isfinite(vis.u_) && isfinite(vis.v_) && isfinite(vis.w_);
+    
+    if(goodBaseline) {
+
+      // Iterate over Stokes parameters and IFs to determine the maximum
+      // UV radius
+      
+      Delay delay;
+      VisData data;
+      unsigned iVis=0;
+      unsigned nVis=0;
+
+      for(unsigned iIf=0; iIf < obs_.nFreq_; iIf++) {
+	for(unsigned iStokes=0; iStokes < obs_.nStokes_; iStokes++) {
+	  
+	  VisStokesData& stokes = group.stokesData_[iStokes];
+	  VisFreqData& freq     = stokes.freqData_[iIf];
+	  wavelength.setFrequency(obs_.frequencies_[iIf]);
+
+	  delay.setDelayInSeconds(vis.u_);
+	  data.u_  = delay.cm() / wavelength.cm();
+	  delay.setDelayInSeconds(vis.v_);
+	  data.v_  = delay.cm() / wavelength.cm();
+	  delay.setDelayInSeconds(vis.w_);
+	  data.w_  = delay.cm() / wavelength.cm();
+	  
+	  data.r_ = sqrt(data.u_ * data.u_ + data.v_ * data.v_ + data.w_ * data.w_);
+	  
+	  data.re_ = vis.re_[iVis];
+	  data.im_ = vis.im_[iVis];
+	  data.wt_ = vis.wt_[iVis];
+
+	  bool goodVis = isfinite(data.re_) && isfinite(data.im_) && isfinite(data.wt_) && data.wt_ > 0.0;
+
+	  if(goodVis) {
+
+	    // Store the max UV radius of the visibilities for this
+	    // frequency
+	    
+	    double uAbs = fabs(data.u_);
+	    double vAbs = fabs(data.v_);
+
+	    freq.uAbsMax_  = freq.uAbsMax_  > uAbs ? freq.uAbsMax_     : uAbs;
+	    freq.vAbsMax_  = freq.vAbsMax_  > vAbs ? freq.vAbsMax_     : vAbs;
+
+	    freq.uvrMax_   = freq.uvrMax_   > data.r_ ? freq.uvrMax_   : data.r_;
+	    stokes.uvrMax_ = stokes.uvrMax_ > data.r_ ? stokes.uvrMax_ : data.r_;
+	    group.uvrMax_  = group.uvrMax_  > data.r_ ? group.uvrMax_  : data.r_;
+
+	    // And increment the number of visibilities in this VisFreqData container
+
+	    freq.nVis_++;
+	    iVis++;
+	    nVis++;
+	
+	  } else {
+	    ++badVis;
+	  }
+	} // End loop over Stokes
+      } // End loop over IFs
+
+      // And increment the count of this baseline group, but only if
+      // some unflagged data were found for this group
+
+      if(nVis != 0)
+	group.nBaseline_++;
+
+    } else {
+      badVis += (obs_.nStokes_ * obs_.nFreq_);
+    }
+
+    if(iGroup % 1000 == 0) {
+      std::cout << "\rReading..." << (100*iGroup)/obs_.nGroup_ << "%";
+      fflush(stdout);
+    }
+
+  }
+
+  // Close the file
+
+  closeFileReader();
+
+  COUT("\rReading...100%");
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+    COUT("Group: " << iGroup << " has size = " << (group.nBaseline_ * obs_.nStokes_ * obs_.nFreq_));
+  }
+
+  COUT(badVis << " visibilities were flagged as unusable ("
+       << (double)(badVis)/(obs_.nGroup_ * obs_.nStokes_ * obs_.nFreq_) <<
+       "% of the total)");
+
+  // Now purge any groups with zero size
+
+  purgeZeroSizedGroups();
+
+  // Finally, resize the internal bitmask to accomodate all axes of
+  // this data set
+
+  synchronizer_.resize(obs_.getNumberOfFrequencies() * obs_.getNumberOfStokesParameters() * baselineGroups_.size());
+}
+
+/**.......................................................................
+ * Initialize this data set from a file
+ */
+void VisDataSet::loadData()
+{
+  //------------------------------------------------------------
+  // Parse parameters
+  //------------------------------------------------------------
+
+  std::string file = getStringVal("file");
+  double perc;
+  Image image;
+  bool usePerc = false;
+  usePerc_ = false;
+  
+  //------------------------------------------------------------
+  // Check whether we are gridding to match a target correlation
+  // percentage, or an image scale
+  //------------------------------------------------------------
+
+  if(getParameter("perc", false)->data_.hasValue()) {
+
+    perc    = getDoubleVal("perc");
+    usePerc = true;
+    usePerc_ = true;
+
+  } else {
+    unsigned npix;
+    npix = getUintVal("npix");
+
+    Angle size;
+    size.setVal(getDoubleVal("size"), getParameter("size", true)->units_);
+
+    image.xAxis().setNpix(npix);
+    image.xAxis().setAngularSize(size);
+    
+    image.yAxis().setNpix(npix);
+    image.yAxis().setAngularSize(size);
+  }
+
+  wtScale_ = getDoubleVal("wtscale");
+
+  //------------------------------------------------------------
+  // Check if a UV min/max were specified
+  //------------------------------------------------------------
+
+  if(getParameter("uvmin", false)->data_.hasValue())
+    uvMin_ = getDoubleVal("uvmin");
+
+  if(getParameter("uvmax", false)->data_.hasValue())
+    uvMax_ = getDoubleVal("uvmax");
+
+  //------------------------------------------------------------
+  // Now load the data from a file
+  //------------------------------------------------------------
+
+  initializeFromFile(file);
+  countData(file);
+
+  if(usePerc)
+    loadData(file, perc); 
+  else
+    loadData(file, image); 
+
+  computePrimaryBeams();
+}
+
+/**.......................................................................
+ * Load data, gridding to the target correlation percentage
+ */
+void VisDataSet::loadData(std::string fileName, double percentCorrelation)
+{
+  //------------------------------------------------------------
+  // First make sure we are set up for data gridding
+  //------------------------------------------------------------
+
+  initializeVisibilityArrays(percentCorrelation);
+
+  //------------------------------------------------------------
+  // Now, accumulate first moments
+  //------------------------------------------------------------
+
+  accumulateMoments(fileName, true);
+
+  //------------------------------------------------------------
+  // If we are estimating the error in the mean from the data
+  // themselves, accumulate second moments now
+  //------------------------------------------------------------
+
+  if(estimateErrInMeanFromData_) {
+    accumulateMoments(fileName, false);
+  }
+
+  //------------------------------------------------------------
+  // Regardless of the method of estimating errors, convert from
+  // variance to error in mean
+  //------------------------------------------------------------
+
+  calculateErrorInMean();
+
+  //------------------------------------------------------------
+  // If we were storing the data internally on read-in, release the
+  // memory now (but only if we were told to; if simulation features
+  // are being used, these may be wanted).
+  //------------------------------------------------------------
+
+  if(releaseDataAfterReadin_)
+    obs_.visibilities_.resize(0);
+}
+
+/**.......................................................................
+ * Initialize this data set from a file, gridding to match the
+ * resolution of the passed image.
+ */
+void VisDataSet::loadData(std::string fileName, Image& image)
+{
+  //------------------------------------------------------------
+  // First make sure we are set up for data gridding
+  //------------------------------------------------------------
+
+  initializeVisibilityArrays(image);
+
+  //------------------------------------------------------------
+  // Now, accumulate first moments
+  //------------------------------------------------------------
+
+  accumulateMoments(fileName, true);
+
+  //------------------------------------------------------------
+  // If we are estimating the error in the mean from the data
+  // themselves, accumulate second moments now
+  //------------------------------------------------------------
+
+  if(estimateErrInMeanFromData_) {
+    accumulateMoments(fileName, false);
+  }
+
+  //------------------------------------------------------------
+  // Regardless of the method of estimating errors, convert from
+  // variance to error in mean
+  //------------------------------------------------------------
+
+  calculateErrorInMean();
+
+  //------------------------------------------------------------
+  // If we were storing the data internally on read-in, release the
+  // memory now (but only if we were told to; if simulation features
+  // are being used, these may be wanted).
+  //------------------------------------------------------------
+
+  if(releaseDataAfterReadin_)
+    obs_.visibilities_.resize(0);
+}
+
+/**.......................................................................
+ * Accumulate first or second moments, either by reading directly from
+ * the file (slower), or by iterating through the internal copy of the
+ * data that has been previously stored (faster).
+ *
+ * Note that the ability to do the latter requires a call to
+ * storeDataInternallyOnReadin() prior to countData().
+ */
+void VisDataSet::accumulateMoments(std::string fileName, bool first)
+{
+  // First, initialize all internal arrays needed for moment
+  // calculation
+
+  initializeForMomentAccumulation(first);
+
+  // Open the file reader if we have not stored the data internally
+
+  if(!storeDataInternally_)
+    openFileReader(fileName);
+
+  ObsInfo::Vis visFromFile;
+  ObsInfo::Vis& vis = visFromFile;
+
+  //------------------------------------------------------------
+  // Iterate over all groups in the UVF file
+  //------------------------------------------------------------
+
+  Wavelength wavelength;
+
+  for(unsigned iGroup=0; iGroup < obs_.nGroup_; iGroup++) {
+
+    if(storeDataInternally_) {
+      vis = obs_.visibilities_[iGroup];
+    } else {
+      getGroup(iGroup, vis);
+    }
+    
+    //------------------------------------------------------------
+    // Find the baseline grouping to which this group belongs
+    //------------------------------------------------------------
+
+    unsigned baselineGroupIndex = aipsBaselineIndexToGroupIndexMap_[vis.baseline_];
+    VisBaselineGroup& group     = baselineGroups_[baselineGroupIndex];
+
+    bool goodBaseline = isfinite(vis.u_) && isfinite(vis.v_) && isfinite(vis.w_);
+    
+    if(goodBaseline) {
+
+      // Now iterate over Stokes parameters and IFs to put the data in
+      // the right place
+
+      Delay delay;
+      VisData data;
+      unsigned iVis=0;
+
+      for(unsigned iIf=0; iIf < obs_.nFreq_; iIf++) {
+
+	wavelength.setFrequency(obs_.frequencies_[iIf]);
+
+	for(unsigned iStokes=0; iStokes < obs_.nStokes_; iStokes++) {
+	  VisStokesData& stokes = group.stokesData_[iStokes];
+	  VisFreqData& freq     = stokes.freqData_[iIf];
+	  
+	  delay.setDelayInSeconds(vis.u_);
+	  data.u_  = delay.cm() / wavelength.cm();
+
+	  delay.setDelayInSeconds(vis.v_);
+	  data.v_  = delay.cm() / wavelength.cm();
+
+	  delay.setDelayInSeconds(vis.w_);
+	  data.w_  = delay.cm() / wavelength.cm();
+	  
+	  data.r_ = sqrt(data.u_ * data.u_ + data.v_ * data.v_);
+	  
+	  data.re_ = vis.re_[iVis];
+	  data.im_ = vis.im_[iVis];
+	  data.wt_ = vis.wt_[iVis];
+	  
+	  bool goodVis = isfinite(data.re_) && isfinite(data.im_) && isfinite(data.wt_) && data.wt_ > 0.0;
+
+	  //------------------------------------------------------------
+	  // Only grid data that fall within the specified UV min/max 
+	  //------------------------------------------------------------
+
+	  goodVis |= (uvMin_ < 0.0 || data.r_ > uvMin_);
+	  goodVis |= (uvMax_ < 0.0 || data.r_ < uvMax_);
+
+	  //------------------------------------------------------------
+	  // If this data point should be gridded, grid it now
+	  //------------------------------------------------------------
+
+	  if(goodVis) {
+	    
+	    // Load this data point into the data gridder for the
+	    // current VisFreqData object
+	    
+	    if(first) {
+	      freq.griddedData_.accumulateFirstMoments( data.u_, data.v_, data.re_, data.im_, data.wt_);
+
+	      if(!usePerc_)
+		allGriddedData_.accumulateFirstMoments( data.u_, data.v_, data.re_, data.im_, data.wt_);
+
+	    } else {
+	      freq.griddedData_.accumulateSecondMoments(data.u_, data.v_, data.re_, data.im_, data.wt_);
+
+	      if(!usePerc_)
+		allGriddedData_.accumulateSecondMoments(data.u_, data.v_, data.re_, data.im_, data.wt_);
+	    }
+
+	    freq.iVis_++;
+	    iVis++;
+	  }
+	}
+      }
+    }
+
+    if(iGroup % 1000 == 0) {
+      std::cout << "\rReading..." << (100*iGroup)/obs_.nGroup_ << "%";
+      fflush(stdout);
+    }
+  }
+
+  COUT("\rReading...100%");
+
+  // If data were read in from the file, close the file now
+
+  if(!storeDataInternally_)
+    closeFileReader();
+}
+
+/**.......................................................................
+ * Convert from first and second moments to mean and error in mean
+ */
+ void VisDataSet::initializeForMomentAccumulation(bool first)
+{
+  //------------------------------------------------------------
+  // Before reading in data, zero all relevant data and weight arrays
+  //------------------------------------------------------------
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	// Tell the UV gridders whether or not the error in the mean
+	// is being estimataed from the data, or by using the data
+	// weights
+
+	freqData.griddedData_.estimateErrorInMeanFromData(estimateErrInMeanFromData_);
+
+	if(first)
+	  freqData.griddedData_.initializeForFirstMoments();
+	else
+	  freqData.griddedData_.initializeForSecondMoments();
+
+      }
+    }
+  }
+
+  // Also initialize the global data gridders
+
+  if(first) {
+    allGriddedData_.initializeForFirstMoments();
+    allModelData_.initializeForFirstMoments();
+    allGriddedResiduals_.initializeForFirstMoments();
+  } else {
+    allGriddedData_.initializeForSecondMoments();
+    allModelData_.initializeForSecondMoments();
+    allGriddedResiduals_.initializeForSecondMoments();
+  }
+}
+
+/**.......................................................................
+ * Convert from first and second moments to mean and error in mean
+ */
+void VisDataSet::calculateErrorInMean()
+{
+  //------------------------------------------------------------
+  // Now that the data have been read in, convert second moments to
+  // error in mean
+  //------------------------------------------------------------
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	freqData.griddedData_.calculateErrorInMean();
+	
+	COUT("Data gridding has resulted in a compression factor of: "
+	     << (double)(freqData.nVis_) / freqData.griddedData_.populatedIndices_.size());
+      }
+    }
+  }
+
+  //------------------------------------------------------------
+  // Also calculate for the global data gridder
+  //------------------------------------------------------------
+
+  allGriddedData_.calculateErrorInMean();
+}
+
+/**.......................................................................
+ * Examine what we know so far about the antennas to determine how
+ * many unique baseline groupings there are.
+ * 
+ * A baseline grouping is defined as all baselines of the same pair
+ * of antenna types; i.e., for an array with 2 different antenna
+ * types, call them type 1 and type 2, there would be 3 distinct
+ * baseline groupings: 1-1, 2-2, and 1-2.
+ */
+void VisDataSet::determineUniqueBaselineGroupings(ObsInfo& obs)
+{
+  // First check that antenna information has been set up before loading
+  // visibility data.  This will affect how we group data on read-in
+
+  if(obs.antennas_.size() == 0) {
+    ThrowError("You must specify antenna types before reading the visibility data, using the "
+	       << "setAntennaType() or setAntennaDiameter() commands. Otherwise, I don't know "
+	       << "how to group visibilities by antenna diameters");
+  }
+
+  // Now iterate through antennas, checking for unique types
+
+  std::vector<Antenna> uniqueAnts;
+  for(unsigned i=0; i < obs.antennas_.size(); i++) {
+    checkAntenna(obs.antennas_[i], uniqueAnts);
+  }
+  
+  // Now we have unique tag IDs.  Maximum number of unique baseline
+  // groupings will be the number of unique antenna types, choose 2 +
+  // number of ant types
+
+  unsigned nUAnt = uniqueAnts.size();
+  COUT("There are now: " << uniqueAnts.size() << " distinct antenna types");
+  unsigned nUBase = (nUAnt * (nUAnt-1))/2 + nUAnt;
+
+  baselineGroups_.resize(nUBase);
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+    group.initialize(obs.nStokes_, obs.frequencies_);
+  }
+
+  COUT("There are now: " << baselineGroups_.size() << " distinct baseline groupings");
+
+  // Iterate through unique antennas, using the antenna idTags to
+  // create a unique baseline grouping tag.  We then associate each
+  // baseline tag with a baseline group.
+
+  for(unsigned iAnt1=0, iBase=0; iAnt1 < uniqueAnts.size(); iAnt1++) {
+    Antenna& ant1 = uniqueAnts[iAnt1];
+    for(unsigned iAnt2=iAnt1; iAnt2 < uniqueAnts.size(); iAnt2++, iBase++) {
+      Antenna& ant2 = uniqueAnts[iAnt2];
+      unsigned baselineTag = ant1.idTag_ | ant2.idTag_;
+      baselineTagToGroupIndexMap_[baselineTag]  = iBase;
+
+      // And initialize the antennas for this baseline group
+
+      baselineGroups_[iBase].antennaPair_.first  = ant1;
+      baselineGroups_[iBase].antennaPair_.second = ant2;
+    }
+  }
+
+  // Now that we have the association between baseline tag and
+  // baseline grouping index, iterate through all possible baselines,
+  // constructing the map of AIPS baseline index to baseline group
+
+  for(unsigned iAnt1=0, iBase=0; iAnt1 < obs.antennas_.size()-1; iAnt1++) {
+    Antenna& ant1 = obs.antennas_[iAnt1];
+
+    for(unsigned iAnt2=iAnt1+1; iAnt2 < obs.antennas_.size(); iAnt2++, iBase++) {
+      Antenna& ant2 = obs.antennas_[iAnt2];
+
+      // Calculate the AIPS-standard baseline index
+
+      unsigned aipsBaselineIndex  = (iAnt1) * 256 + (iAnt2);
+
+      // Construct a bitmask of the two antenna types
+
+      unsigned baselineTag        = ant1.idTag_ | ant2.idTag_;
+
+      // And get the baseline group index that corresponds to these
+      // two antenna types
+
+      unsigned baselineGroupIndex = baselineTagToGroupIndexMap_[baselineTag];
+
+      aipsBaselineIndexToGroupIndexMap_[aipsBaselineIndex] = baselineGroupIndex;
+      aipsBaselineIndexCount_[aipsBaselineIndex] = 0;
+
+      // For convenience, add this baseline to the list of baselines
+      // associated with this group.  These will be used for simulation
+      // purposes only
+
+      VisBaselineGroup& group = baselineGroups_[baselineGroupIndex];
+      group.addBaseline(aipsBaselineIndex, ant1, ant2);
+    }
+  }
+}
+
+/**.......................................................................
+ * Check if the current antenna type has been encountered before, or
+ * if this is a new antenna type.
+ */
+void VisDataSet::checkAntenna(Antenna& ant, std::vector<Antenna>& uniqueAnts)
+{
+  if(uniqueAnts.size() == 0) {
+    ant.idTag_ = 1;
+    uniqueAnts.push_back(ant);
+  } else {
+
+    unsigned i=0;
+    for(i=0; i < uniqueAnts.size(); i++) {
+      Antenna& currAnt = uniqueAnts[i];
+      
+      // If this antenna was not specified by diameter, and it
+      // matches the type of the current antenna, it is the same
+      // type of antenna
+      
+      if(ant.type_ != Antenna::ANT_DIAM && ant.type_ == currAnt.type_) {
+	ant.idTag_ = currAnt.idTag_;
+	break;
+      }
+      
+      // If this antenna was specified by diameter, and it has the
+      // same diameter as the current antenna, treat it as the
+      // same type of antenna
+      
+      if(ant.type_ == Antenna::ANT_DIAM && currAnt.type_ && ant.diameter_ == currAnt.diameter_) {
+	ant.idTag_ = currAnt.idTag_;
+	break;
+      }
+    }
+    
+    // If no match, this is a new unique antenna type
+    
+    if(i == uniqueAnts.size()) {
+      ant.idTag_ = (uniqueAnts[uniqueAnts.size()-1].idTag_ << 1);
+      uniqueAnts.push_back(ant);
+    }
+  }
+}
+
+/**.......................................................................
+ * Guess at the type of antennas, based on the name of the telescope
+ * from the UVF header.
+ */
+void VisDataSet::guessAtAntennaType()
+{
+  String telStr(obs_.getTelescopeName());
+
+  if(obs_.antennas_.size() == 0) {
+    COUT("The number and type of antennas is unknown (no AIPS AN table is present in the UVF file");
+    return;
+  }
+
+  if(telStr.contains("SZA")) {
+    obs_.setAntennaType(Antenna::ANT_SZA);
+    COUT("There are " << obs_.antennas_.size() << " antennas, and judging from the telescope name, I'm going to assume they are SZA (3.5m) antennas");
+  } else if(telStr.contains("OVRO") && obs_.antennas_.size() == 6) {
+    obs_.setAntennaType(Antenna::ANT_OVRO);
+    COUT("There are " << obs_.antennas_.size() << " antennas, and judging from the telescope name, I'm going to assume they are OVRO (10.4m) antennas");
+  } else if(telStr.contains("OVRO") && obs_.antennas_.size() > 6) {
+    COUT("There are " << obs_.antennas_.size() << " antennas, and the array is probably CARMA, " << std::endl
+	 << "but you will have to specify the association of " << std::endl
+	 << "antenna types with antenna index by using setAntennaType()");
+  }
+
+#if 0
+  for(unsigned iAnt=0; iAnt < obs_.antennas_.size(); iAnt++) {
+    COUT(obs_.antennas_[iAnt]);
+  }
+
+  plotAntennas();
+#endif
+
+  return;
+}
+
+void VisDataSet::printFileStats()
+{
+  std::ostringstream os;
+  os << "UVF File contains observations of: " << std::endl << std::endl
+    
+     << "  Object     = " << obs_.getSourceName() << std::endl
+     << "  RA         = " << obs_.getObsRa()      << std::endl
+     << "  Dec        = " << obs_.getObsDec()     << std::endl 
+     << "  Equinox    = " << obs_.getObsEquinox() << std::endl << std::endl
+    
+     << "with: " << std::endl << std::endl
+
+     << "  Telescope  = " << obs_.getTelescopeName()  << std::endl
+     << "  Instrument = " << obs_.getInstrumentName() << std::endl << std::endl
+
+     << "There are "   << (obs_.nGroup_ * obs_.nStokes_ * obs_.nFreq_) << " total visibilities, " << "comprising: " << std::endl << std::endl;
+
+  COUT("nbaseline = " << obs_.nBaseline_ << " nant = " << obs_.antennas_.size());
+
+  if(obs_.antennas_.size() > 0) {
+    os << "  " << std::setw(12) << std::right << obs_.nGroup_/obs_.nBaseline_ << " timestamps" << std::endl
+       << " x" << std::setw(12) << std::right << obs_.nBaseline_         << " baselines"  << std::endl;
+  } else {
+    os << "  " << std::setw(12) << std::right << obs_.nGroup_ << " timestamps x baselines" << std::endl;
+  }
+
+  os << " x" << std::setw(12) << std::right << obs_.nStokes_            
+     << (obs_.nStokes_ > 1 ? " Stokes parameters" : " Stokes parameter") << std::endl
+     << " x" << std::setw(12) << std::right << obs_.nFreq_ 
+     << (obs_.nFreq_ > 1 ? " IFs" : " IF");
+
+  os << " (";
+  for(unsigned i=0; i < obs_.nFreq_; i++) {
+    os << std::setprecision(3) << obs_.frequencies_[i].GHz();
+    if(i < obs_.nFreq_ - 1) {
+      os << ", ";
+    }
+  }
+
+  os << " GHz)" << std::endl;
+
+  COUT(os.str());
+}
+
+/**.......................................................................
+ * Add a model component to the composite image-plane model
+ */
+void VisDataSet::addModel(Model& model)
+{
+  if(applies(model)) {
+
+    Generic2DAngularModel& model2D = dynamic_cast<Generic2DAngularModel&>(model);
+
+    initWait();
+
+    // Dynamic cast will throw if this model cannot be cast to the
+    // right type, but the call to applies() should protect against
+    // this
+
+    for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+      VisBaselineGroup& groupData = baselineGroups_[iGroup];
+      
+      for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+	VisStokesData& stokesData = groupData.stokesData_[iStokes];
+	
+	for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	  VisFreqData& freqData = stokesData.freqData_[iFreq];
+	  addModelMultiThread(freqData, model2D, iGroup, iStokes, iFreq);
+	}
+      }
+    }
+
+    waitUntilDone();
+
+  }
+}
+
+/**.......................................................................
+ * Multi-thread-aware version of addModel
+ */
+void VisDataSet::addModelMultiThread(VisFreqData& vfd, Generic2DAngularModel& model, 
+				     unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  if(!pool_) {
+    vfd.addModel(model);
+  } else {
+    VisExecData* ved = new VisExecData(this, &vfd, &model, iGroup, iStokes, iFreq);
+    registerPending(iGroup, iStokes, iFreq);
+    pool_->execute(&execAddModel, ved);
+  }
+}
+
+/**.......................................................................
+ * Static method which can be passed to a thread pool, to add a model to a 
+ * single VisFreqData
+ */
+EXECUTE_FN(VisDataSet::execAddModel)
+{
+  VisExecData*           ved   = (VisExecData*)args;
+  VisDataSet*            vds   = ved->vds_;
+  VisFreqData*           vfd   = ved->vfd_;
+  Generic2DAngularModel* model = ved->model_;
+
+  vfd->addModel(*model);
+  vds->registerDone(ved->iGroup_, ved->iStokes_, ved->iFreq_);
+
+  delete ved;
+}
+
+/**.......................................................................
+ * Clear all model components
+ */
+void VisDataSet::clearModels()
+{
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	freqData.clearModel();
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Compute the chi-squared of this dataset with the given model
+ */
+ChisqVariate VisDataSet::computeChisq()
+{
+  // Transform models
+  Timer timer;
+
+  timer.start();
+  transformModels();
+  timer.stop();
+
+  //  COUT("transform took: " << timer.deltaInSeconds() << " seconds");
+
+  // Accumulate chi-squared over all frequencies
+
+  timer.start();
+  ChisqVariate chisq = accumulateChisq();
+  timer.stop();
+
+  //  COUT("chisq took: " << timer.deltaInSeconds() << " seconds");
+
+  // Now clear models so that the next call to addModel()
+  // re-initializes the model (rather than adds to it)
+
+  clearModels();
+
+  // Return the chi-squared
+
+  return chisq;
+}
+
+/**.......................................................................
+ * Transform models
+ */
+void VisDataSet::transformModels()
+{
+  initWait();
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	transformModelMultiThread(freqData, iGroup, iStokes, iFreq);
+      }
+    }
+  }
+
+  waitUntilDone();
+}
+
+/**.......................................................................
+ * Inverse transform data
+ */
+void VisDataSet::inverseTransformData()
+{
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	freqData.inverseTransformData();
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Static method which can be passed to a thread pool, to transform a
+ * single VisFreqData image
+ */
+EXECUTE_FN(VisDataSet::execTransformModel)
+{
+  VisExecData* ved = (VisExecData*)args;
+  VisDataSet*  vds = ved->vds_;
+  VisFreqData* vfd = ved->vfd_;
+
+  vfd->transformModel();
+  vds->registerDone(ved->iGroup_, ved->iStokes_, ved->iFreq_);
+
+  delete ved;
+}
+
+/**.......................................................................
+ * Multi-thread-aware version of transformModel
+ */
+void VisDataSet::transformModelMultiThread(VisFreqData& vfd, unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  if(!pool_) {
+    vfd.transformModel();
+  } else {
+    VisExecData* ved = new VisExecData(this, &vfd, iGroup, iStokes, iFreq);
+    registerPending(iGroup, iStokes, iFreq);
+    pool_->execute(&execTransformModel, ved);
+  }
+}
+
+/**.......................................................................
+ * Compute the chi-squared of this dataset with the given model
+ */
+ChisqVariate VisDataSet::accumulateChisq()
+{
+  ChisqVariate chisq;
+
+  initWait();
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	computeChisqMultiThread(freqData, chisq, iGroup, iStokes, iFreq);
+      }
+    }
+  }
+  
+  waitUntilDone();
+
+  return chisq;
+}
+
+/**.......................................................................
+ * Accumulate an average model over all baselines, and frequencies
+ */
+void VisDataSet::accumulateModel()
+{
+  COUT("Here am 0");
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	COUT("Here am iFreq = " << iFreq);
+	freqData.accumulateModel(allModelData_);
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Accumulate an average residuals over all baselines, and frequencies
+ */
+void VisDataSet::accumulateResiduals()
+{
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	freqData.accumulateResiduals(allGriddedResiduals_);
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Static method which can be passed to a thread pool, to accumulate
+ * chisq for a single VisFreqData image
+ */
+EXECUTE_FN(VisDataSet::execComputeChisq)
+{
+  VisExecData*  ved   = (VisExecData*)args;
+  VisDataSet*   vds   = ved->vds_;
+  VisFreqData*  vfd   = ved->vfd_;
+  ChisqVariate* chisq = ved->chisq_;
+  ChisqVariate  chisqTmp;
+
+  chisqTmp = vfd->computeChisq();
+
+  ved->dataAccessGuard_.lock();
+  (*chisq) += chisqTmp;
+  ved->dataAccessGuard_.unlock();
+
+  vds->registerDone(ved->iGroup_, ved->iStokes_, ved->iFreq_);
+
+  delete ved;
+}
+
+/**.......................................................................
+ * Multi-thread-aware version of computeChisq
+ */
+void VisDataSet::computeChisqMultiThread(VisFreqData& vfd, ChisqVariate& chisq, unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  if(!pool_) {
+    chisq += vfd.computeChisq();
+  } else {
+    VisExecData* ved = new VisExecData(this, &vfd, &chisq, iGroup, iStokes, iFreq);
+    registerPending(iGroup, iStokes, iFreq);
+    pool_->execute(&execComputeChisq, ved);
+  }
+}
+
+
+void VisDataSet::checkBaselineGroupIndex(unsigned iGroup)
+{
+  if(iGroup > baselineGroups_.size()-1) {
+    ThrowError("Invalid group index: " << iGroup << ".  Should be < " << baselineGroups_.size());
+  }
+}
+
+void VisDataSet::plotUv(int iGroup, int iStokes, int iFreq)
+{
+  std::vector<float> x;
+  std::vector<float> y;
+
+  getVis(Dft2d::DATA_UV, x, y, iGroup, iStokes, iFreq);
+
+  PgUtil::linePlot(x.size(), &x[0], &y[0], 0, "U", "V", "UV plot", false, false);
+}
+
+void VisDataSet::plotReal(int iGroup, int iStokes, int iFreq)
+{
+  std::vector<float> x;
+  std::vector<float> y;
+
+  getVis(Dft2d::DATA_REAL, x, y, iGroup, iStokes, iFreq);
+
+  PgUtil::linePlot(x.size(), &x[0], &y[0], 0, "UV Radius", "Re", "Real plot", false, false);
+}
+
+void VisDataSet::plotImag(int iGroup, int iStokes, int iFreq)
+{
+  std::vector<float> x;
+  std::vector<float> y;
+
+  getVis(Dft2d::DATA_IMAG, x, y, iGroup, iStokes, iFreq);
+
+  PgUtil::linePlot(x.size(), &x[0], &y[0], 0, "UV Radius", "Im", "Imag plot", false, false);
+}
+
+void VisDataSet::plotAbs(int iGroup, int iStokes, int iFreq)
+{
+  std::vector<float> x;
+  std::vector<float> y;
+
+  getVis(Dft2d::DATA_ABS, x, y, iGroup, iStokes, iFreq);
+
+  PgUtil::linePlot(x.size(), &x[0], &y[0], 0, "UV Radius", "Abs", "Abs plot", false, false);
+}
+
+/**.......................................................................
+ * Extract the gridded visibility data from this object
+ */
+void VisDataSet::getVis(Dft2d::DataType type,
+			std::vector<float>& x, std::vector<float>& y, 
+			int iGroup, int iStokes, int iFreq)
+{
+  unsigned groupStart,  groupStop;
+  unsigned stokesStart, stokesStop;
+  unsigned freqStart,   freqStop;
+  unsigned nVis = 0;
+
+  if(iGroup < 0) {
+    groupStart = 0;
+    groupStop  = baselineGroups_.size()-1;
+  } else {
+    checkBaselineGroupIndex(iGroup);
+    groupStart = groupStop = iGroup;
+  }
+
+  for(unsigned iGroup=groupStart; iGroup <= groupStop; iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+    
+    if(iStokes < 0) {
+      stokesStart = 0;
+      stokesStop  = group.stokesData_.size()-1;
+    } else {
+      group.checkStokesIndex(iStokes);
+      stokesStart = stokesStop = iStokes;
+    }
+
+    for(unsigned iStokes=stokesStart; iStokes <= stokesStop; iStokes++) {
+      VisStokesData& stokesData = group.stokesData_[iStokes];
+      
+      if(iFreq < 0) {
+	freqStart = 0;
+	freqStop  = stokesData.freqData_.size()-1;
+      } else {
+	stokesData.checkFrequencyIndex(iFreq);
+	freqStart = freqStop = iFreq;
+      }
+
+      for(unsigned iFreq=freqStart; iFreq <= freqStop; iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	nVis += freqData.griddedData_.populatedIndices_.size();
+      }
+    }
+  }
+
+  x.resize(nVis);
+  y.resize(nVis);
+
+  unsigned iDat = 0;
+  for(unsigned iGroup=groupStart; iGroup <= groupStop; iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+
+    if(iStokes < 0) {
+      stokesStart = 0;
+      stokesStop  = group.stokesData_.size()-1;
+    } else {
+      stokesStart = stokesStop = iStokes;
+    }
+
+    for(unsigned iStokes=stokesStart; iStokes <= stokesStop; iStokes++) {
+      VisStokesData& stokesData = group.stokesData_[iStokes];
+    
+      if(iFreq < 0) {
+	freqStart = 0;
+	freqStop  = stokesData.freqData_.size()-1;
+      } else {
+	freqStart = freqStop = iFreq;
+      }
+
+      for(unsigned iFreq=freqStart; iFreq <= freqStop; iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	for(unsigned iVis=0; iVis < freqData.griddedData_.populatedIndices_.size(); iVis++) {
+
+	  // Extract the (u, v) coordinate, and the requested value
+	  // from the data grid container
+
+	  double u, v, val, r;
+	  freqData.griddedData_.getUVData(freqData.griddedData_.populatedIndices_[iVis], type, u, v, val);
+
+	  // For convenience, precompute the uv radius
+
+	  r = sqrt(u*u + v*v);
+
+	  switch (type) {
+	  case Dft2d::DATA_UV:
+	    x[iDat] = u;
+	    y[iDat] = v;
+	    break;
+	  case Dft2d::DATA_REAL:
+	  case Dft2d::DATA_IMAG:
+	  case Dft2d::DATA_ABS:
+	    x[iDat] = r;
+	    y[iDat] = val;
+	    break;
+	  default:
+	    break;
+	  }
+
+	  ++iDat;
+	}
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Once data have been sorted into unique baseline pairings (groups),
+ * purge any groups that don't contain any data.
+ */
+void VisDataSet::purgeZeroSizedGroups()
+{
+  bool found=false;
+
+  do {
+    found = false;
+    std::vector<VisBaselineGroup>::iterator iter = baselineGroups_.begin();
+    for(; iter < baselineGroups_.end(); iter++) {
+      if(iter->nBaseline_ == 0) {
+	found = true;
+	baselineGroups_.erase(iter);
+	break;
+      }
+    }
+  } while(found);
+}
+
+/**.......................................................................
+ * Resize internal Dfts to the size needed to grid the data to the
+ * requested percent correlation
+ */
+void VisDataSet::initializeVisibilityArrays(double percentCorrelation)
+{
+  UvDataGridder* max = 0;
+
+  Length diameter1, diameter2;
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < group.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = group.stokesData_[iStokes];
+
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	//------------------------------------------------------------
+	// Now check what percent correlation we want for combining data
+	//------------------------------------------------------------
+
+	if(percentCorrelation < 1.0) {
+
+	  // Get the correlation length corresponding to this baseline
+	  // group, this frequency
+	  
+	  diameter1 = group.antennaPair_.first.getDiameter();
+	  diameter2 = group.antennaPair_.second.getDiameter();
+	  double correlationLength = 
+	    Dft2d::correlationLength(diameter1, diameter2,
+				     obs_.frequencies_[iFreq], percentCorrelation);
+	  
+	  // Resize images and dfts to match the correlation length
+
+	  COUT("Correlation percentage of: " << percentCorrelation*100 << "%");
+	  freqData.resize(correlationLength);
+
+	  UvDataGridder* curr = &freqData.griddedData_;
+
+	  if(max == 0 
+	     || curr->xAxis().getNpix() > max->xAxis().getNpix()
+	     || curr->yAxis().getNpix() > max->yAxis().getNpix()) {
+	    max = curr;
+	  }
+
+	} else {
+	  ThrowError("I won't let you specify a correlation percentage of 1.  "
+		     << " This corresponds to a correlation length of zero, "
+		     << "which would require an infinitely large image.");
+	}
+      }
+    }
+  }
+
+  COUT("Initializing global gridders");
+  initializeGlobalGridders(max);
+  COUT("Initializing global gridders...done");
+}
+
+void VisDataSet::initializeGlobalGridders(UvDataGridder* max)
+{
+  Image image = max->getImage(false);
+  
+  Image::Axis& xAxis = image.xAxis();
+  Image::Axis& yAxis = image.yAxis();
+
+  allGriddedData_.zeropad(true);
+  allGriddedData_.xAxis().setNpix(xAxis.getNpix());
+  allGriddedData_.yAxis().setNpix(yAxis.getNpix());
+  allGriddedData_.xAxis().setAngularSize(xAxis.getAngularSize());
+  allGriddedData_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  allModelData_.zeropad(true);
+  allModelData_.xAxis().setNpix(xAxis.getNpix());
+  allModelData_.yAxis().setNpix(yAxis.getNpix());
+  allModelData_.xAxis().setAngularSize(xAxis.getAngularSize());
+  allModelData_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  allGriddedResiduals_.zeropad(true);
+  allGriddedResiduals_.xAxis().setNpix(xAxis.getNpix());
+  allGriddedResiduals_.yAxis().setNpix(yAxis.getNpix());
+  allGriddedResiduals_.xAxis().setAngularSize(xAxis.getAngularSize());
+  allGriddedResiduals_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  COUT("Done initializing global gridders");
+}
+
+/**.......................................................................
+ * Resize internal Dfts to the size needed to grid the data to match the 
+ * passed image
+ */
+void VisDataSet::initializeVisibilityArrays(Image& image)
+{
+  UvDataGridder* max = 0;
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+
+    for(unsigned iStokes=0; iStokes < group.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = group.stokesData_[iStokes];
+
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	// Resize images and dfts to match the correlation length
+
+	freqData.resize(image);
+
+	UvDataGridder* curr = &freqData.griddedData_;
+
+	if(max == 0 
+	   || curr->xAxis().getNpix() > max->xAxis().getNpix()
+	   || curr->yAxis().getNpix() > max->yAxis().getNpix()) {
+	  max = curr;
+	}
+      }
+    }
+  }
+
+  initializeGlobalGridders(max);
+}
+
+/**.......................................................................
+ * Compute the primary beam (power pattern) for this baseline
+ */
+void VisDataSet::computePrimaryBeams()
+{
+  std::ostringstream os;
+  PgUtil::setInteractive(false);
+
+  initWait();
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& group = baselineGroups_[iGroup];
+
+#if 0
+    os.str("");
+    os << (iGroup+1) << "/xs";
+
+    PgUtil::open(os.str());
+    PgUtil::subplot(4,4);
+#endif
+
+    Antenna& ant1 = group.antennaPair_.first;
+    Antenna& ant2 = group.antennaPair_.second;
+    
+    for(unsigned iStokes=0; iStokes < group.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = group.stokesData_[iStokes];
+
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+
+	computePrimaryBeamMultiThread(freqData, ant1, ant2, iGroup, iStokes, iFreq);
+
+	COUT("Computing beams for frequency = " << obs_.frequencies_[iFreq] << " " << freqData.frequency_);
+
+#if 0
+	freqData.primaryBeam_.display();
+#endif
+     }
+    }
+#if 0
+    PgUtil::close();
+#endif
+  }
+
+  waitUntilDone();
+}
+
+/**.......................................................................
+ * Multi-thread-aware version of computePrimaryBeam
+ */
+void VisDataSet::computePrimaryBeamMultiThread(VisFreqData& vfd, Antenna& ant1, Antenna& ant2, 
+					       unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  if(!pool_) {
+    vfd.primaryBeam_  = ant1.getRealisticApertureField(vfd.primaryBeam_, obs_.frequencies_[iFreq]);
+    vfd.primaryBeam_ *= ant2.getRealisticApertureField(vfd.primaryBeam_, obs_.frequencies_[iFreq]);
+  } else {
+    VisExecData* ved = new VisExecData(this, &vfd, &ant1, &ant2, iGroup, iStokes, iFreq);
+    registerPending(iGroup, iStokes, iFreq);
+    pool_->execute(&execComputePrimaryBeam, ved);
+  }
+}
+
+/**.......................................................................
+ * Static method which can be passed to a thread pool, to compute the
+ * primary beam for a single VisFreqData object
+ */
+EXECUTE_FN(VisDataSet::execComputePrimaryBeam)
+{
+  VisExecData* ved  = (VisExecData*)args;
+  VisDataSet*  vds  = ved->vds_;
+  VisFreqData* vfd  = ved->vfd_;
+  Antenna*     ant1 = ved->ant1_;
+  Antenna*     ant2 = ved->ant2_;
+
+  vfd->primaryBeam_  = ant1->getRealisticApertureField(vfd->primaryBeam_, vds->obs_.frequencies_[ved->iFreq_]);
+  vfd->primaryBeam_ *= ant2->getRealisticApertureField(vfd->primaryBeam_, vds->obs_.frequencies_[ved->iFreq_]);
+
+  vds->registerDone(ved->iGroup_, ved->iStokes_, ved->iFreq_);
+
+  delete ved;
+}
+
+
+/**.......................................................................
+ * Perform simulated observations.  We decouple transforming the
+ * images from computing the visibilities, so that we can multi-thread
+ * it later.
+ */
+void VisDataSet::observe()
+{
+  // Now transform images
+
+  Timer timer;
+  timer.start();
+
+  transformImages();
+
+  timer.stop();
+
+  COUT("transform took: " << timer.deltaInSeconds() << " seconds");
+
+  // And calculate visibilities
+
+  replaceVisibilities();
+}
+
+void VisDataSet::observe(ObsInfo& obs)
+{
+  // Now transform images
+
+  Timer timer;
+  timer.start();
+
+  transformImages();
+
+  timer.stop();
+
+  COUT("transform took: " << timer.deltaInSeconds() << " seconds");
+
+  // And calculate visibilities
+
+  calculateVisibilities(obs);
+}
+
+/**.......................................................................
+ * Transform all simulated images prior to calculating simulated
+ * visibilities
+ */
+void VisDataSet::transformImages()
+{
+  // Iterate over all unique baseline groups, Stokes parameters and
+  // frequencies, observing the source
+
+  initWait();
+
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+    
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	transformImageMultiThread(freqData, iGroup, iStokes, iFreq);
+      }
+    }
+  }
+
+  waitUntilDone();
+}
+
+/**.......................................................................
+ * Initialize waiting for a multi-threaded process to complete.  If no
+ * running in a multi-threaded context, this is a no-op
+ */
+void VisDataSet::initWait()
+{
+  if(pool_) {
+    synchronizer_.reset();
+    synchronizer_.initWait();
+  }
+}
+
+/**.......................................................................
+ * Wait until we are signalled that a transaction has completed.  If
+ * not running in multi-threaded context, this is a no-op
+ */
+void VisDataSet::waitUntilDone()
+{
+  if(pool_) {
+    synchronizer_.wait();
+  }
+}
+
+/**.......................................................................
+ * Static method which can be passed to a thread pool, to transform a
+ * single VisFreqData image
+ */
+EXECUTE_FN(VisDataSet::execTransformImage)
+{
+  VisExecData* ved = (VisExecData*)args;
+  VisDataSet*  vds = ved->vds_;
+  VisFreqData* vfd = ved->vfd_;
+
+  vfd->transformImage();
+  vds->registerDone(ved->iGroup_, ved->iStokes_, ved->iFreq_);
+
+  delete ved;
+}
+
+/**.......................................................................
+ * Multi-thread-aware version of transformImage
+ */
+void VisDataSet::transformImageMultiThread(VisFreqData& vfd, unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  if(!pool_) {
+    vfd.transformImage();
+  } else {
+    VisExecData* ved = new VisExecData(this, &vfd, iGroup, iStokes, iFreq);
+    registerPending(iGroup, iStokes, iFreq);
+    pool_->execute(&execTransformImage, ved);
+  }
+}
+
+/**.......................................................................
+ * Register a single iteration of a transaction as done.  If this iteration
+ * completes the entire transaction, then any waiting threads will be signalled
+ */
+void VisDataSet::registerDone(unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  unsigned nStokes = obs_.getNumberOfStokesParameters();
+  unsigned nFreq   = obs_.getNumberOfFrequencies();
+  unsigned nGroup  = baselineGroups_.size();
+
+  unsigned iBit = (iGroup * nStokes + iStokes) * nFreq + iFreq;
+
+  synchronizer_.registerDone(iBit, nGroup * nStokes * nFreq); 
+}
+
+/**.......................................................................
+ * Register a single iteration of a transaction as pending.
+ */
+void VisDataSet::registerPending(unsigned iGroup, unsigned iStokes, unsigned iFreq)
+{
+  unsigned nStokes = obs_.getNumberOfStokesParameters();
+  unsigned nFreq   = obs_.getNumberOfFrequencies();
+  unsigned nGroup  = baselineGroups_.size();
+
+  unsigned iBit = (iGroup * nStokes + iStokes) * nFreq + iFreq;
+
+  synchronizer_.registerPending(iBit);
+}
+
+/**.......................................................................
+ * Calculate simulated visibilities from previously-transformed images
+ */
+void VisDataSet::calculateVisibilities(ObsInfo& obs)
+{
+  // Initialize the visibility array
+  
+  obs.initializeSimulationVisibilityArray();
+
+  // Now fill the visibility array
+
+  fillSimulationVisibilityArray(obs);
+}
+
+/**.......................................................................
+ * Fill the internal visibility array with simulated values
+ */
+void VisDataSet::
+fillSimulationVisibilityArray(ObsInfo& obs)
+{
+  Geoid geoid;
+  unsigned iVisGroup = 0;
+  Flux reNoise, imNoise;
+
+#if 1
+  ChisqVariate chisq;
+#endif
+
+  obs.calculateStartJd();
+
+  //------------------------------------------------------------  
+  // Iterate over timestamps
+  //------------------------------------------------------------
+
+  HourAngle startHa = obs.getStartHa();
+  HourAngle stopHa  = obs.getStopHa();
+  HourAngle deltaHa = obs.getDeltaHa();
+  HourAngle ha;
+
+  unsigned nHa = (unsigned)((stopHa - startHa) / deltaHa);
+
+  for(unsigned iHa=0; iHa < nHa; iHa++) {
+
+    // Compute the current HA
+
+    ha = (startHa) + (deltaHa * iHa) + (deltaHa/2);
+
+    //------------------------------------------------------------
+    // Iterate over all baseline groups for this timestamp
+    //------------------------------------------------------------
+
+    for(unsigned iBaseGroup=0; iBaseGroup < baselineGroups_.size(); iBaseGroup++) {
+
+      VisBaselineGroup& group = baselineGroups_[iBaseGroup];
+      unsigned nBaseline = group.baselines_.size();
+
+      //------------------------------------------------------------
+      // Iterate through all baselines of this group
+      //------------------------------------------------------------
+
+      for(unsigned iBase=0; iBase < nBaseline; iBase++) {
+
+	VisBaseline& baseline = group.baselines_[iBase];
+
+	Antenna* ant1 = baseline.ant1_;
+	Antenna* ant2 = baseline.ant2_;
+	
+	// Store the XYZ coordinates of this baseline
+	
+	LengthTriplet xyz1 = ant1->getXyz();
+	LengthTriplet xyz2 = ant2->getXyz();
+	LengthTriplet dxyz = xyz2 - xyz1;
+
+	// Compute the UVW coordinate that corresponds to the
+	// current HA
+	    
+	LengthTriplet uvw = geoid.haDecAndXyzToUvw(ha, obs.obsDec_, dxyz);
+
+	//------------------------------------------------------------
+	// Iterate over all Stokes parameters for this baseline
+	//------------------------------------------------------------
+
+	unsigned nStokes = group.stokesData_.size();
+	
+	for(unsigned iStokes=0; iStokes < nStokes; iStokes++) {
+
+	  VisStokesData& stokesData = group.stokesData_[iStokes];
+	  unsigned nFreq = stokesData.freqData_.size();
+      
+	  //------------------------------------------------------------
+	  // Iterate over all frequencies of this Stokes parameter
+	  //------------------------------------------------------------
+	  
+	  for(unsigned iFreq=0; iFreq < nFreq; iFreq++) {
+	    
+	    VisFreqData& freqData = stokesData.freqData_[iFreq];
+	    Frequency& freq = freqData.frequency_;
+	    
+	    // Convert to u and v in units of wavelength
+
+	    double u = uvw.u_.meters() / freq.meters();
+	    double v = uvw.v_.meters() / freq.meters();
+	    
+	    // Finally, interpolate the visibility
+	    
+	    double re, im;
+	    bool valid;
+	    
+	    freqData.dft_.interpolateReImData(u, v, re, im, valid);
+	    
+	    // Now do something with it!
+	    
+	    ObsInfo::Vis& vis = obs.visibilities_[iVisGroup];
+
+	    // Store the uv as light travel time, in seconds
+
+	    vis.u_ = uvw.u_.meters() / Constants::lightSpeed_.metersPerSec();
+	    vis.v_ = uvw.v_.meters() / Constants::lightSpeed_.metersPerSec();
+	    vis.w_ = uvw.w_.meters() / Constants::lightSpeed_.metersPerSec();
+
+	    // Install the AIPS baseline code
+
+	    vis.baseline_ = baseline.aipsBaselineIndex_;
+
+	    // And come up with a JD date
+
+	    vis.jd_ = obs.startJd_ + iHa * obs.deltaHa_.hours()/24;
+	    //	    COUT("iVisGroup = " << iVisGroup << " ha = " << ha << " jd = " << setprecision(12) << setw(12) << vis.jd_);	    
+	    
+	    // Note that when images were installed, they were already
+	    // converted to Jy, so no need to convert here
+	    
+	    unsigned visInd = iStokes * nFreq + iFreq;
+	    
+	    double wt = 1.0;
+
+	    obs.generateNoise(reNoise, wt);
+	    obs.generateNoise(imNoise, wt);
+
+	    vis.re_[visInd] = re + reNoise.Jy();
+	    vis.im_[visInd] = im + imNoise.Jy();
+	    vis.wt_[visInd] = valid ? wt : 0.0;
+
+#if 1
+	    double chisqReVal = (vis.re_[visInd] - re);
+	    double chisqImVal = (vis.im_[visInd] - im);
+
+	    chisq += (chisqReVal * chisqReVal) * wt;
+	    chisq += (chisqImVal * chisqImVal) * wt;
+#endif
+	  }
+	}
+
+	iVisGroup++;
+      }
+    }
+  }
+
+#if 1
+  COUT("Chisq isnow: " << chisq);
+#endif
+}
+
+/**.......................................................................
+ * Replace internal visibilities with simulated visibilities
+ */
+void VisDataSet::
+replaceVisibilities()
+{
+  unsigned nGroupsBetweenUpdates = obs_.visibilities_.size() / 10;
+  bool first = true;
+
+  Flux reNoise, imNoise;
+
+  //------------------------------------------------------------  
+  // Iterate over all groups in the file
+  //------------------------------------------------------------
+
+  for(unsigned iGroup=0; iGroup < obs_.visibilities_.size(); iGroup++) {
+
+    // Get the associated visibility
+
+    ObsInfo::Vis& vis = obs_.visibilities_[iGroup];
+
+    // Convert from light-travel time in seconds to meters
+
+    double uMeters = vis.u_ * Constants::lightSpeed_.metersPerSec();
+    double vMeters = vis.v_ * Constants::lightSpeed_.metersPerSec();
+
+    // Find the baseline grouping to which this baseline belongs
+
+    unsigned baselineGroupIndex = aipsBaselineIndexToGroupIndexMap_[vis.baseline_];
+    VisBaselineGroup& group = baselineGroups_[baselineGroupIndex];
+
+    // Iterate over Stokes and frequency for this visibility
+
+    unsigned nStokes = group.stokesData_.size();
+    for(unsigned iStokes=0; iStokes < nStokes; iStokes++) {
+
+      VisStokesData& stokesData = group.stokesData_[iStokes];
+
+      unsigned nFreq = stokesData.freqData_.size();
+      for(unsigned iFreq=0; iFreq < nFreq; iFreq++) {
+	
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	Frequency& freq = freqData.frequency_;
+
+	// Convert from uv in meters to units of wavelength
+
+	double u = uMeters / freq.meters();
+	double v = vMeters / freq.meters();
+
+	// Finally, interpolate the visibility
+
+	double re, im;
+	bool valid;
+	    
+	freqData.dft_.interpolateReImData(u, v, re, im, valid);
+
+	// Replace the visibility with the interpolated values
+
+	unsigned visInd = iStokes * nFreq + iFreq;
+	    
+	double wt = 1.0;
+
+	obs_.generateNoise(reNoise, wt);
+	obs_.generateNoise(imNoise, wt);
+
+	vis.re_[visInd] = re + reNoise.Jy();
+	vis.im_[visInd] = im + imNoise.Jy();
+	
+	// Only replace visibilities that weren't already flagged
+
+	if(goodWt(vis.wt_[visInd])) {
+	  vis.wt_[visInd] = valid ? wt : 0.0;
+
+	  if(first) {
+	    COUT("Wt = " << wt);
+	    first = false;
+	  }
+	}
+
+      }
+    }
+
+    if(iGroup % nGroupsBetweenUpdates == 0) {
+      std::cout << "\rReplacing visibilities..." << (100*iGroup)/obs_.visibilities_.size() << "%";
+      fflush(stdout);
+    }
+
+  }
+
+  COUT("\rReplacing visibilities...100%");
+}
+
+/**.......................................................................
+ * Calculate the UVW coordinates of the observation
+ */
+void VisDataSet::calculateSimulatedUvw()
+{
+  Geoid geoid;
+
+  unsigned nHa   = (unsigned)((obs_.stopHa_ - obs_.startHa_) / obs_.deltaHa_);
+  unsigned nAnt  = obs_.antennas_.size();
+  unsigned nBase = (nAnt * (nAnt-1))/2;
+
+  COUT("nBase = " << nBase << " nHa = " << nHa);
+
+  std::vector<float> u(nHa * nBase);
+  std::vector<float> v(nHa * nBase);
+
+  std::vector<float> up(nHa * nBase);
+  std::vector<float> vp(nHa * nBase);
+  std::vector<float> mup(nHa * nBase);
+  std::vector<float> mvp(nHa * nBase);
+
+  //------------------------------------------------------------
+  // First calculate XYZ for all antennas
+  //------------------------------------------------------------
+
+  std::vector<LengthTriplet> xyz(obs_.antennas_.size());
+
+  Lla lla = obs_.getArrayLocation();
+  for(unsigned iAnt=0; iAnt < obs_.antennas_.size(); iAnt++) {
+    LengthTriplet enu = obs_.antennas_[iAnt].getEnu();
+    xyz[iAnt] = geoid.geodeticLlaAndEnuToXyz(lla, enu);
+  }
+
+  PgUtil::open("2/xs");
+  PgUtil::setOverplot(false);
+  PgUtil::setXmin(-2e4);
+  PgUtil::setXmax( 2e4);
+  PgUtil::setYmin(-2e4);
+  PgUtil::setYmax( 2e4);
+  PgUtil::setUsedefs(true);
+
+  //------------------------------------------------------------
+  // Now iterate over timestamps
+  //------------------------------------------------------------
+
+  HourAngle ha;
+  HourAngle startHa = obs_.getStartHa();
+  HourAngle deltaHa = obs_.getDeltaHa();
+
+  for(unsigned iHa=0; iHa < nHa; iHa++) {
+
+    ha = startHa + (deltaHa * iHa);
+
+      for(unsigned iAnt1=0, iBase=0; iAnt1 < obs_.antennas_.size()-1; iAnt1++) {
+	LengthTriplet& xyz1 = xyz[iAnt1];
+	for(unsigned iAnt2=iAnt1+1; iAnt2 < obs_.antennas_.size(); iAnt2++, iBase++) {
+	  LengthTriplet& xyz2 = xyz[iAnt2];
+	  LengthTriplet xyz = xyz2 - xyz1;
+	  LengthTriplet uvw = geoid.haDecAndXyzToUvw(ha, obs_.getObsDec(), xyz);
+	  
+	  u[iHa * nBase + iBase]  =  uvw.u_.meters();
+	  v[iHa * nBase + iBase]  =  uvw.v_.meters();
+	}
+      }
+  }
+
+  //------------------------------------------------------------
+  // Now display, iterating over frequency
+  //------------------------------------------------------------
+  
+  for(unsigned iFreq=0; iFreq < obs_.nFreq_; iFreq++) {
+    Frequency& freq = obs_.frequencies_[iFreq];
+    
+    for(unsigned iUv=0; iUv < u.size(); iUv++) {
+
+      up[iUv]  =   u[iUv] / freq.meters();
+      vp[iUv]  =   v[iUv] / freq.meters();
+      mup[iUv] = -up[iUv];
+      mvp[iUv] = -vp[iUv];
+
+    }
+
+    PgUtil::linePlot(up.size(), &up[0], &vp[0], 0, "U", "V", "", false, false);
+    PgUtil::setOverplot(true);
+    PgUtil::linePlot(mup.size(), &mup[0], &mvp[0], 0, "U", "V", "", false, false);
+
+  }
+}
+
+/**.......................................................................
+ * Simulation only: Add an image to the image to be observed by the
+ * array
+ */
+void VisDataSet::addImage(Image& image, int iFreq, int iStokes)
+{
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+    
+    unsigned iStokesStart = (iStokes < 0) ? 0 : (unsigned) iStokes;
+    unsigned iStokesStop  = (iStokes < 0) ? groupData.stokesData_.size() : (unsigned) iStokes;
+
+    for(unsigned iStokes=iStokesStart; iStokes < iStokesStop; iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      unsigned iFreqStart = (iFreq < 0) ? 0 : (unsigned) iFreq;
+      unsigned iFreqStop  = (iFreq < 0) ? stokesData.freqData_.size() : (unsigned) iFreq;
+
+      for(unsigned iFreq=iFreqStart; iFreq < iFreqStop; iFreq++) {
+	VisFreqData& freqData = stokesData.freqData_[iFreq];
+	freqData.addImage(image);
+      }
+    }
+  }
+}
+
+bool VisDataSet::canSimulate()
+{
+  return obs_.canSimulate() && haveImages();
+}
+
+bool VisDataSet::haveImages()
+{
+  for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
+    VisBaselineGroup& groupData = baselineGroups_[iGroup];
+    
+    for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
+      VisStokesData& stokesData = groupData.stokesData_[iStokes];
+      
+      if(!stokesData.hasImage())
+	return false;
+    }
+  }
+
+  return true;
+}
+
+//=======================================================================
+// Methods of VisDataSet::VisBaselineGroup
+//=======================================================================
+
+/**.......................................................................
+ * Initialize the internal arrays of this object
+ */
+void VisDataSet::
+VisBaselineGroup::initialize(unsigned nStokes, std::vector<Frequency>& frequencies)
+{
+  stokesData_.resize(nStokes);
+
+  for(unsigned iStokes=0; iStokes < stokesData_.size(); iStokes++) {
+    VisStokesData& stokesData = stokesData_[iStokes];
+    stokesData.stokes_ = Stokes::STOKES_NONE;
+
+    stokesData.freqData_.resize(frequencies.size());
+
+    for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
+      VisFreqData& freqData = stokesData.freqData_[iFreq];
+      freqData.frequency_ = frequencies[iFreq];
+    }
+  }
+
+}
+
+void VisDataSet::
+VisBaselineGroup::checkStokesIndex(unsigned iStokes)
+{
+  if(iStokes > stokesData_.size()-1) {
+    ThrowError("Invalid stokes index: " << iStokes << ".  Should be < " << stokesData_.size());
+  }
+}
+
+void VisDataSet::
+VisBaselineGroup::addBaseline(unsigned aipsBaselineIndex, Antenna& ant1, Antenna& ant2)
+{
+  baselines_.push_back(VisBaseline(aipsBaselineIndex, ant1, ant2));
+}
+
+//=======================================================================
+// Methods of VisDataSet::VisStokesData
+//=======================================================================
+
+void VisDataSet::VisStokesData::checkFrequencyIndex(unsigned iFreq)
+{
+  if(iFreq > freqData_.size()-1) {
+    ThrowError("Invalid frequency index: " << iFreq << ".  Should be < " << freqData_.size());
+  }
+}
+
+bool VisDataSet::VisStokesData::hasImage()
+{
+  bool freqsHaveImage = true;
+  for(unsigned iFreq=0; iFreq < freqData_.size(); iFreq++) {
+    if(!freqData_[iFreq].hasImage()) {
+      freqsHaveImage = false;
+      break;
+    }
+  }
+
+  return freqsHaveImage;
+}
+
+//=======================================================================
+// Methods of VisDataSet::VisFreqData
+//=======================================================================
+
+/**.......................................................................
+ * Clear the composite model
+ */
+void VisDataSet::VisFreqData::clearModel()
+{
+  compositeModel_.hasData_ = false;
+}
+
+/**.......................................................................
+ * Add a model component to the composite model
+ */
+void VisDataSet::VisFreqData::addModel(Generic2DAngularModel& model)
+{
+  // Load the model component into our temporary array
+  
+  //  COUT("Modelcomponent has size: " << modelComponent_.xAxis().getNpix() << " with " << 
+  //       modelComponent_.xAxis().getAngularSize());
+
+  model.fillImage(DataSetType::DATASET_RADIO, modelComponent_, &frequency_);
+
+  //  COUT("Plotting model image");
+  //  modelComponent_.display();
+  
+  // Now convert to Jy
+  
+  modelComponent_.convertToJy(frequency_);
+
+  //    COUT("Plotting model image in Jy");
+  //    modelComponent_.display();
+  
+  // Finally, add it to the composite model
+  
+  if(!compositeModel_.hasData()) 
+    compositeModel_ = modelComponent_;
+  else
+    compositeModel_ += modelComponent_;
+}
+
+/**.......................................................................
+ * Simulation only: add an image to the image to be observed
+ */
+void VisDataSet::VisFreqData::addImage(Image& image)
+{
+  // If no image has been installed, initialize containers to match
+  // the new image size
+
+  if(!hasImage_) {
+    resize(image);
+  } else if(!primaryBeam_.axesAreEquivalent(image)) {
+    ThrowError("Attempt to add an Image that is a different size than the previously added image");
+  }
+
+  // Initialize the temporary model component from the image
+
+  modelComponent_ = image;
+
+  //  COUT("Plotting image: ");
+  //  modelComponent_.display();
+
+  // Convert it to Jy
+    
+  modelComponent_.convertToJy(frequency_);
+
+  //  COUT("Plotting image in Jy: ");
+  //  modelComponent_.display();
+    
+  // And add it to the composite model.  If no image has been added,
+  // set the composite model equal to this component.  If an image has
+  // already been added, add the image to what's already there.
+    
+  if(hasImage_)
+    compositeModel_ += modelComponent_;
+  else
+    compositeModel_  = modelComponent_;
+
+#if 0
+  COUT("Plotting composite model image");
+  compositeModel_.display();
+#endif
+
+  hasImage_ = true;
+}
+
+bool VisDataSet::VisFreqData::hasImage()
+{
+  return hasImage_;
+}
+
+/**.......................................................................
+ * Return the chi-squared of this frequency data set with the current
+ * composite image-plane model
+ */
+void VisDataSet::VisFreqData::transformModel()
+{
+  // The composite model should already be in units of Jy.  All we
+  // have to do is apply the primary beam...
+
+  //  compositeModel_ *= primaryBeam_;
+
+#if 0
+  //  if(frequency_.GHz() > 34.5) {
+  COUT("Plotting compositeModel for model");
+  compositeModel_.display();
+  //  }
+#endif
+
+#if 0
+  //------------------------------------------------------------
+  // We multiply the image by a function that mimicks the data
+  // convolution in the Fourier plane
+  //------------------------------------------------------------
+
+  unsigned nx = compositeModel_.xAxis().getNpix();
+  unsigned ny = compositeModel_.yAxis().getNpix();
+
+  double sigx = (double)(nx)/(2*M_PI*Dft2d::convSigInPixels_);
+  double sigy = (double)(ny)/(2*M_PI*Dft2d::convSigInPixels_);
+
+  Image convCorrection;
+  convCorrection.createGaussianImage(nx, ny, sigx, sigy);
+  compositeModel_ *= convCorrection;
+#endif
+
+  //  COUT("Plotting primary beam for model");
+  //  primaryBeam_.display();
+  
+  // And transform the image
+  
+  dft_.setInput(compositeModel_);
+  dft_.computeForwardTransform();
+  dft_.shift();
+
+#if 0
+  //  if(frequency_.GHz() > 34.5) {
+    COUT("Plotting real model");
+    dft_.plotReal();
+    //  }
+#endif
+}
+
+/**.......................................................................
+ * Compute chi-square for a single frequency
+ */
+ChisqVariate VisDataSet::VisFreqData::computeChisq()
+{
+#if 0
+  //  if(frequency_.GHz() > 34.5) {
+    COUT("Plotting data and model real 1");
+
+    griddedData_.plotReal();
+
+    dft_.plotReal();
+
+    COUT("Here 0");
+    std::vector<double> modelData = dft_.getUVData(Dft2d::DATA_REAL);
+    std::vector<double> dataData  = griddedData_.getUVData(Dft2d::DATA_REAL);
+    std::vector<double> popData   = griddedData_.getPopulatedIndices();
+
+    for(unsigned i=0; i < dataData.size(); i++) {
+      if(popData[i] > 0.0) {
+	dataData[i] -= modelData[i];
+      }
+    }
+
+    COUT("Plotting difference");
+    PgUtil::greyScale(dataData.size(), &dataData[0], dft_.nxZeroPad_, dft_.nyZeroPad_/2+1, 0, 1, 0, 1, 0, 0, 0, "", "", "Real Difference");
+
+    COUT("Plotting data and model imag 1");
+    griddedData_.plotImag();
+    dft_.plotImag();
+
+    modelData = dft_.getUVData(Dft2d::DATA_IMAG);
+    dataData  = griddedData_.getUVData(Dft2d::DATA_IMAG);
+
+    for(unsigned i=0; i < dataData.size(); i++) {
+      if(popData[i] > 0.0) {
+	dataData[i] -= modelData[i];
+      }
+    }
+
+    COUT("Plotting difference");
+    PgUtil::greyScale(dataData.size(), &dataData[0], dft_.nxZeroPad_, dft_.nyZeroPad_/2+1, 0, 1, 0, 1, 0, 0, 0, "", "", "Imag Difference");
+    //  }
+#endif
+
+  bool first = true;
+
+  // Now iterate over just the fourier components that were populated
+  // with data, computing chi-squared from the contributions of both
+  // real and imaginary components
+
+  ChisqVariate chisq;
+
+  unsigned dftInd;
+  double reData, reErr, imData, imErr, reModel, imModel;
+  double reCont, imCont;
+
+  for(unsigned i=0; i < griddedData_.populatedIndices_.size(); i++) {
+
+    dftInd = griddedData_.populatedIndices_[i];
+
+    reData  = griddedData_.out_[dftInd][0];
+    imData  = griddedData_.out_[dftInd][1];
+
+    reErr   = griddedData_.errorInMean_[dftInd][0] * wtScale_;
+    imErr   = griddedData_.errorInMean_[dftInd][1] * wtScale_;
+
+    reModel = dft_.out_[dftInd][0];
+    imModel = dft_.out_[dftInd][1];
+
+    // Get the contribution to chisq of the real data
+
+    reCont = (reData - reModel) / reErr;
+    reCont *= reCont;
+
+    // And the contribution to chisq of the imaginary data
+
+    //    COUT("imData = " << imData << " imModel = " << imModel << " imErr = " << imErr);
+
+    imCont = (imData - imModel) / imErr;
+    imCont *= imCont;
+
+    // And coadd both contributions to chi-square
+
+    chisq += reCont;
+    chisq += imCont;
+
+#if 0
+    if(first) {
+      COUT("reErr = " << reErr << " imErr = " << imErr);
+      first = false;
+    }
+#endif
+  }
+
+  return chisq;
+}
+
+/**.......................................................................
+ * Accumulate the model for a single frequency
+ */
+void VisDataSet::VisFreqData::accumulateModel(UvDataGridder& gridder)
+{
+  // Now iterate over just the fourier components that were populated
+  // with data, accumulating model visiibilities for populated indices
+  // only
+
+  unsigned dftInd;
+  double err, reModel, imModel, wt;
+
+  for(unsigned i=0; i < griddedData_.populatedIndices_.size(); i++) {
+
+    dftInd  = griddedData_.populatedIndices_[i];
+
+    // Use real weights from the data
+
+    err = griddedData_.errorInMean_[dftInd][0] * wtScale_;
+    wt = 1.0/(err*err);
+
+    // Get the model component for this index
+
+    reModel = dft_.out_[dftInd][0];
+    imModel = dft_.out_[dftInd][1];
+
+    // Construct a running mean of the model by co-adding this data to
+    // any data that already exists for this uv cell
+
+    gridder.accumulateFirstMoments(dftInd, reModel, imModel, wt);
+  }
+}
+
+/**.......................................................................
+ * Accumulate the residuals for a single frequency
+ */
+void VisDataSet::VisFreqData::accumulateResiduals(UvDataGridder& gridder)
+{
+  // Now iterate over just the fourier components that were populated
+  // with data, accumulating model visiibilities for populated indices
+  // only
+
+  unsigned dftInd;
+  double reData, imData, err, reModel, imModel, wt;
+
+  for(unsigned i=0; i < griddedData_.populatedIndices_.size(); i++) {
+
+    dftInd  = griddedData_.populatedIndices_[i];
+
+    // Get the data
+
+    reData  = griddedData_.out_[dftInd][0];
+    imData  = griddedData_.out_[dftInd][1];
+
+    // Use real weights from the data
+
+    err = griddedData_.errorInMean_[dftInd][0] * wtScale_;
+    wt = 1.0/(err*err);
+
+    // Get the model component for this index
+
+    reModel = dft_.out_[dftInd][0];
+    imModel = dft_.out_[dftInd][1];
+
+    // Construct a running mean of the model by co-adding this data to
+    // any data that already exists for this uv cell
+
+    gridder.accumulateFirstMoments(dftInd, reData - reModel, imData - imModel, wt);
+  }
+}
+
+/**.......................................................................
+ * Take the composite image, multiply by the primary beam, and transform
+ * it
+ */
+void VisDataSet::VisFreqData::inverseTransformData()
+{
+  COUT("Computing inversetransfor,");
+  dft_.computeInverseTransform();
+
+#if 0
+  COUT("Computing inversetransfor,.. abotu to display");
+  Image image = dft_.getImage();
+  image.display();
+#endif
+}
+
+/**.......................................................................
+ * Take the composite image, multiply by the primary beam, and transform
+ * it
+ */
+void VisDataSet::VisFreqData::transformImage()
+{
+  //------------------------------------------------------------
+  // The composite model should already be in units of Jy.  All we
+  // have to do is apply the primary beam...
+  //------------------------------------------------------------
+
+  //  compositeModel_ *= primaryBeam_;
+
+  //------------------------------------------------------------
+  // We divide the image by a function that corrects for the
+  // convolution in the Fourier plane
+  //------------------------------------------------------------
+
+  unsigned nx = compositeModel_.xAxis().getNpix();
+  unsigned ny = compositeModel_.yAxis().getNpix();
+
+  double sigx = (double)(nx)/(2*M_PI*Dft2d::convSigInPixels_);
+  double sigy = (double)(ny)/(2*M_PI*Dft2d::convSigInPixels_);
+
+  Image convCorrection;
+  convCorrection.createGaussianImage(nx, ny, sigx, sigy);
+
+  compositeModel_ /= convCorrection;
+
+#if 0
+  COUT("Plotting compositeModel for image");
+  compositeModel_.display();
+#endif
+
+  //------------------------------------------------------------
+  // Finally, transform the image
+  //------------------------------------------------------------
+
+  dft_.zeropad(true);
+  dft_.initialize(compositeModel_);
+  dft_.computeForwardTransform();
+  dft_.shift();
+
+#if 0
+  COUT("Plotting real image");
+  dft_.plotReal();
+#endif
+}
+
+/**.......................................................................
+ * Resize images and dfts to the requested size
+ */
+void VisDataSet::VisFreqData::resize(double correlationLength)
+{
+  // Find the power-of-2 size of the array that will grid the
+  // data _at least_ this finely
+  
+  unsigned nx = 
+    Dft2d::nearestPowerOf2NotLessThan(sqrt(2.0) * uAbsMax_ / correlationLength);
+  
+  unsigned ny = 
+    Dft2d::nearestPowerOf2NotLessThan(sqrt(2.0) * vAbsMax_ / correlationLength);
+
+  // First resize the data grid and model dft to match
+  
+  COUT("Setting resolution");
+  griddedData_.zeropad(true);
+  griddedData_.xAxis().setNpix(nx);
+  griddedData_.yAxis().setNpix(ny);
+  griddedData_.xAxis().setSpatialFrequencyResolution(uAbsMax_ / (nx/2));
+  griddedData_.yAxis().setSpatialFrequencyResolution(vAbsMax_ / (ny/2));
+
+  COUT("griddedData now has resolution: " << griddedData_.yAxis().getSpatialFrequencyResolution());
+
+  dft_.zeropad(true);
+  dft_.xAxis().setNpix(nx);
+  dft_.yAxis().setNpix(ny);
+  dft_.xAxis().setSpatialFrequencyResolution(uAbsMax_ / (nx/2));
+  dft_.yAxis().setSpatialFrequencyResolution(vAbsMax_ / (ny/2));
+
+
+  // Resize the primary beam to match
+
+  primaryBeam_.initialize();
+  primaryBeam_.xAxis().setNpix(nx);
+  primaryBeam_.yAxis().setNpix(ny);
+  primaryBeam_.xAxis().setAngularSize(griddedData_.xAxis().getAngularSize());
+  primaryBeam_.yAxis().setAngularSize(griddedData_.yAxis().getAngularSize());
+
+  COUT("Primary beam now has size: " << primaryBeam_.xAxis().getAngularSize() << " and resolution " <<
+       primaryBeam_.xAxis().getAngularResolution());
+
+  // Also resize the composite model
+  
+  modelComponent_.initialize();
+  modelComponent_.xAxis().setNpix(nx);
+  modelComponent_.yAxis().setNpix(ny);
+  modelComponent_.xAxis().setAngularSize(griddedData_.xAxis().getAngularSize());
+  modelComponent_.yAxis().setAngularSize(griddedData_.yAxis().getAngularSize());
+
+  // Also resize the composite model
+  
+  compositeModel_.initialize();
+  compositeModel_.xAxis().setNpix(nx);
+  compositeModel_.yAxis().setNpix(ny);
+  compositeModel_.xAxis().setAngularSize(griddedData_.xAxis().getAngularSize());
+  compositeModel_.yAxis().setAngularSize(griddedData_.yAxis().getAngularSize());
+
+#if 0
+  COUT("Resizing composite model to : xsize  = " 
+       << compositeModel_.xAxis().getAngularSize().degrees()
+       << " ysize = " 
+       << compositeModel_.yAxis().getAngularSize().degrees());
+#endif
+
+  COUT("corresponds to correlation length = " << correlationLength << " at freq " << frequency_ 
+       << ". Data will be gridded to: " << nx << "x" << ny);
+}
+
+/**.......................................................................
+ * Resize images and dfts to the requested size
+ */
+void VisDataSet::VisFreqData::resize(Image& image)
+{
+  // Find the power-of-2 size of the array that will grid the
+  // data _at least_ this finely
+  
+  Image::Axis& xAxis = image.xAxis();
+  Image::Axis& yAxis = image.yAxis();
+
+  // First resize the data grid to match
+  
+  griddedData_.zeropad(true);
+  griddedData_.xAxis().setNpix(xAxis.getNpix());
+  griddedData_.yAxis().setNpix(yAxis.getNpix());
+  griddedData_.xAxis().setAngularSize(xAxis.getAngularSize());
+  griddedData_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  COUT("Image has size: " << image.xAxis().getNpix());
+  COUT("Gridded data now has size: " << griddedData_.xAxis().getNpix());
+
+  dft_.zeropad(true);
+  dft_.xAxis().setNpix(xAxis.getNpix());
+  dft_.yAxis().setNpix(yAxis.getNpix());
+  dft_.xAxis().setAngularSize(xAxis.getAngularSize());
+  dft_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  // Resize the primary beam to match
+
+  primaryBeam_.initialize();
+  primaryBeam_.xAxis().setNpix(xAxis.getNpix());
+  primaryBeam_.yAxis().setNpix(yAxis.getNpix());
+  primaryBeam_.xAxis().setAngularSize(xAxis.getAngularSize());
+  primaryBeam_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  // Also resize the composite model
+  
+  modelComponent_.initialize();
+  modelComponent_.xAxis().setNpix(xAxis.getNpix());
+  modelComponent_.yAxis().setNpix(yAxis.getNpix());
+  modelComponent_.xAxis().setAngularSize(xAxis.getAngularSize());
+  modelComponent_.yAxis().setAngularSize(yAxis.getAngularSize());
+
+  // Also resize the composite model
+  
+  compositeModel_.initialize();
+  compositeModel_.xAxis().setNpix(xAxis.getNpix());
+  compositeModel_.yAxis().setNpix(yAxis.getNpix());
+  compositeModel_.xAxis().setAngularSize(xAxis.getAngularSize());
+  compositeModel_.yAxis().setAngularSize(yAxis.getAngularSize());
+}
+
+//=======================================================================
+// Methods of VisDataSet
+//=======================================================================
+
+void VisDataSet::estimateErrorInMeanFromData(bool estimate)
+{
+  estimateErrInMeanFromData_ = estimate;
+}
+
+//-----------------------------------------------------------------------
+// Methods for writing FITS files
+//-----------------------------------------------------------------------
+
+/**.......................................................................
+ * Write data in the visibilties_ array to a FITS file
+ */
+void VisDataSet::writeUvfFile(std::string fileName)
+{
+  FitsIoHandler fitsio;
+  fitsio.writeUvfFile(fileName, obs_);
+}
+
+bool VisDataSet::goodWt(double wt)
+{
+  return isfinite(wt) && wt > 0.0;
+}
+
+ObsInfo& VisDataSet::getObs()
+{
+  return obs_;
+}
+
+/**.......................................................................
+ * Display the data.  For visibility data, we display the dirty map of
+ * the composite data (all frequencies, all baselines)
+ */
+void VisDataSet::display()
+{
+  allGriddedData_.shift();
+  allGriddedData_.computeInverseTransform();
+
+  Image image = allGriddedData_.getImage(false);
+
+  image.display();
+}
+
+/**.......................................................................
+ * Display the composite model.  For visibility data we will transform
+ * to the Fourier plane
+ */
+void VisDataSet::displayCompositeModel()
+{
+  // First we have to transform the models
+
+  transformModels();
+
+  // Now we need to accumulate an average model
+
+  accumulateModel();
+
+  // Now transform and display the average model
+
+  allModelData_.shift();
+  allModelData_.computeInverseTransform();
+
+  Image image = allModelData_.getImage(false);
+
+  image.display();
+}
+
+/**.......................................................................
+ * Display the composite model.  For visibility data we will transform
+ * to the Fourier plane
+ */
+void VisDataSet::displayResiduals()
+{
+  // First we have to transform the models
+
+  transformModels();
+
+  // Now we need to accumulate the residuals
+
+  accumulateResiduals();
+
+  // Now transform and display the average model
+
+  allGriddedResiduals_.shift();
+  allGriddedResiduals_.computeInverseTransform();
+
+  Image image = allGriddedResiduals_.getImage(false);
+
+  image.display();
+}

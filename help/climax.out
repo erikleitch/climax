@@ -1,0 +1,63 @@
+\BOOKMARK [1][-]{section.1}{Quickstart Guide}{}
+\BOOKMARK [2][-]{subsection.1.1}{Introduction}{section.1}
+\BOOKMARK [2][-]{subsection.1.2}{Theory of Operation}{section.1}
+\BOOKMARK [2][-]{subsection.1.3}{Defining Datasets}{section.1}
+\BOOKMARK [2][-]{subsection.1.4}{Defining Models}{section.1}
+\BOOKMARK [3][-]{subsubsection.1.4.1}{Adding Models}{subsection.1.4}
+\BOOKMARK [3][-]{subsubsection.1.4.2}{Removing Models}{subsection.1.4}
+\BOOKMARK [3][-]{subsubsection.1.4.3}{Correlating Model Parameters}{subsection.1.4}
+\BOOKMARK [2][-]{subsection.1.5}{Global Control Parameters}{section.1}
+\BOOKMARK [3][-]{subsubsection.1.5.1}{Running Markov Chains}{subsection.1.5}
+\BOOKMARK [3][-]{subsubsection.1.5.2}{Displaying Datasets and Models}{subsection.1.5}
+\BOOKMARK [3][-]{subsubsection.1.5.3}{Outputting Chains}{subsection.1.5}
+\BOOKMARK [3][-]{subsubsection.1.5.4}{Reading Chains Back into Climax}{subsection.1.5}
+\BOOKMARK [2][-]{subsection.1.6}{Examples}{section.1}
+\BOOKMARK [1][-]{section.2}{The SZ Effect}{}
+\BOOKMARK [2][-]{subsection.2.1}{Comptonization of the CMB}{section.2}
+\BOOKMARK [2][-]{subsection.2.2}{Integrated Y Estimates}{section.2}
+\BOOKMARK [2][-]{subsection.2.3}{Mass estimates}{section.2}
+\BOOKMARK [3][-]{subsubsection.2.3.1}{Some sanity checks}{subsection.2.3}
+\BOOKMARK [3][-]{subsubsection.2.3.2}{Self-Similar Models --- Theory}{subsection.2.3}
+\BOOKMARK [1][-]{section.3}{Models}{}
+\BOOKMARK [2][-]{subsection.3.1}{SZ Models}{section.3}
+\BOOKMARK [3][-]{subsubsection.3.1.1}{Beta Model \(-model\)}{subsection.3.1}
+\BOOKMARK [3][-]{subsubsection.3.1.2}{Generalized NFW \(GNFW\) Model}{subsection.3.1}
+\BOOKMARK [3][-]{subsubsection.3.1.3}{Nagai07 GNFW Model}{subsection.3.1}
+\BOOKMARK [3][-]{subsubsection.3.1.4}{Arnaud GNFW Model}{subsection.3.1}
+\BOOKMARK [2][-]{subsection.3.2}{Problems with the GNFW model}{section.3}
+\BOOKMARK [3][-]{subsubsection.3.2.1}{Comparing the A10 and N07 P500}{subsection.3.2}
+\BOOKMARK [3][-]{subsubsection.3.2.2}{Comparing P500 and M500}{subsection.3.2}
+\BOOKMARK [3][-]{subsubsection.3.2.3}{The A10 Model is not Self-consistent}{subsection.3.2}
+\BOOKMARK [2][-]{subsection.3.3}{Other Models}{section.3}
+\BOOKMARK [3][-]{subsubsection.3.3.1}{Image Model}{subsection.3.3}
+\BOOKMARK [1][-]{section.4}{Datasets}{}
+\BOOKMARK [2][-]{subsection.4.1}{Visibility Datasets}{section.4}
+\BOOKMARK [3][-]{subsubsection.4.1.1}{Making Images of Visibility Data}{subsection.4.1}
+\BOOKMARK [3][-]{subsubsection.4.1.2}{Dirty Maps and Pixel Covariance}{subsection.4.1}
+\BOOKMARK [3][-]{subsubsection.4.1.3}{Synthesized beam}{subsection.4.1}
+\BOOKMARK [3][-]{subsubsection.4.1.4}{Estimating the clean beam width}{subsection.4.1}
+\BOOKMARK [3][-]{subsubsection.4.1.5}{Clean images}{subsection.4.1}
+\BOOKMARK [2][-]{subsection.4.2}{Writing Visibility Datasets}{section.4}
+\BOOKMARK [2][-]{subsection.4.3}{Stacking Visibility Datasets}{section.4}
+\BOOKMARK [2][-]{subsection.4.4}{Mosaicked Visibility Datasets}{section.4}
+\BOOKMARK [3][-]{subsubsection.4.4.1}{Mosaicking Theory}{subsection.4.4}
+\BOOKMARK [3][-]{subsubsection.4.4.2}{Mosaicked clean images}{subsection.4.4}
+\BOOKMARK [2][-]{subsection.4.5}{Heterogeneous Visibility Datasets}{section.4}
+\BOOKMARK [2][-]{subsection.4.6}{Image Datasets}{section.4}
+\BOOKMARK [3][-]{subsubsection.4.6.1}{Image Handling Basics}{subsection.4.6}
+\BOOKMARK [3][-]{subsubsection.4.6.2}{Generic Image Dataset}{subsection.4.6}
+\BOOKMARK [3][-]{subsubsection.4.6.3}{Xray Image Dataset}{subsection.4.6}
+\BOOKMARK [3][-]{subsubsection.4.6.4}{Radio Image Dataset}{subsection.4.6}
+\BOOKMARK [1][-]{section.5}{Consistency Tests}{}
+\BOOKMARK [2][-]{subsection.5.1}{Side-by-side Comparison of -model fitting with Markov}{section.5}
+\BOOKMARK [2][-]{subsection.5.2}{Sanity check on 3D radial-profile fitting}{section.5}
+\BOOKMARK [2][-]{subsection.5.3}{Side-by-side comparison of Nagai07 model fitting with Markov}{section.5}
+\BOOKMARK [1][-]{section.6}{Implementation Details}{}
+\BOOKMARK [2][-]{subsection.6.1}{Sampling from multi-variate normal distributions with arbitrary correlations}{section.6}
+\BOOKMARK [2][-]{subsection.6.2}{Convergence}{section.6}
+\BOOKMARK [2][-]{subsection.6.3}{Maximum Likelihood Estimators}{section.6}
+\BOOKMARK [3][-]{subsubsection.6.3.1}{Gaussian Data}{subsection.6.3}
+\BOOKMARK [3][-]{subsubsection.6.3.2}{Poisson Data}{subsection.6.3}
+\BOOKMARK [3][-]{subsubsection.6.3.3}{Joint Likelihood Calculation}{subsection.6.3}
+\BOOKMARK [2][-]{subsection.6.4}{Model Selection}{section.6}
+\BOOKMARK [1][-]{section.7}{To-do List}{}

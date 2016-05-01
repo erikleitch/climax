@@ -1,0 +1,316 @@
+#=======================================================================
+# Targets
+#=======================================================================
+
+all: libs bins
+
+BINS = generic_bins
+
+ifneq ($(MATLAB),)
+  BINS = matlab_bins
+endif
+
+ifneq ($(PYTHON),)
+  BINS = python_bins
+endif
+
+bins: $(BINS)
+
+#=======================================================================
+# Mex file compilation
+#=======================================================================
+
+MEX = 
+ifneq ($(MATLAB_PATH),)
+  MEX := $(MATLAB_PATH)/bin/mex
+endif
+
+ifneq ($(MATLAB_PATH),)
+  CCINC += -I$(MATLAB_PATH)/extern/include
+endif
+
+#-----------------------------------------------------------------------
+# List of mex files to compile.  If no mex compiler is present, or the
+# headers are not present, leave this blank
+#-----------------------------------------------------------------------
+
+MEXOBJ = 
+ifneq ($(MEX),)
+  ifneq ($(MATLAB_PATH),)
+
+    ifeq ($(MAC_OSX),0)
+      ifeq ($(COMPILE_FOR_64BIT),0)
+        MEXALLOBJ =  $(patsubst %.cc,%.mexglx,$(wildcard $(BIN_PREFIX)Mat*.cc))
+        MEXOBJ    =  $(patsubst %.cc,%.mexglx,$(wildcard $(BIN_PREFIX)Mat*.cc)) 
+      else
+        MEXALLOBJ =  $(patsubst %.cc,%.mexa64,$(wildcard $(BIN_PREFIX)Mat*.cc))
+        MEXOBJ    =  $(patsubst %.cc,%.mexa64,$(wildcard $(BIN_PREFIX)Mat*.cc)) 
+      endif
+    else
+      ifeq ($(COMPILE_FOR_64BIT),0)
+        MEXALLOBJ =  $(patsubst %.cc,%.mexmac,$(wildcard $(BIN_PREFIX)Mat*.cc))
+        MEXOBJ    =  $(patsubst %.cc,%.mexmac,$(wildcard $(BIN_PREFIX)Mat*.cc)) 
+      else
+        MEXALLOBJ =  $(patsubst %.cc,%.mexmaci64,$(wildcard $(BIN_PREFIX)Mat*.cc))
+        MEXOBJ    =  $(patsubst %.cc,%.mexmaci64,$(wildcard $(BIN_PREFIX)Mat*.cc)) 
+      endif
+    endif
+
+  endif
+endif
+
+matlab_bins: $(MEXOBJ)
+
+#-----------------------------------------------------------------------
+# Rule for making .mexglx files from .cc files
+#-----------------------------------------------------------------------
+
+$(BIN_EXE_PREFIX)%.mexglx: $(BIN_PREFIX)%.cc
+	$(MEX) $< $(MEXFLAGS) $(GENERIC_FLAGS) $(CCINC) $(LDPATH) $(MATLIBS) -output $(@)
+
+#-----------------------------------------------------------------------
+# Rule for making .mexa64 files from .cc files
+#-----------------------------------------------------------------------
+
+$(BIN_EXE_PREFIX)%.mexa64: $(BIN_PREFIX)%.cc
+	$(MEX) $< $(MEXFLAGS) $(GENERIC_FLAGS) $(CCINC) $(LDPATH) $(MATLIBS) -output $(@)
+
+#-----------------------------------------------------------------------
+# Rule for making .mexmac files from .cc files
+#-----------------------------------------------------------------------
+
+$(BIN_EXE_PREFIX)%.mexmac: $(BIN_PREFIX)%.cc
+	$(MEX) $< $(MEXFLAGS) $(GENERIC_FLAGS) $(CCINC) $(LDPATH) $(MATLIBS) -output $(@)
+
+#-----------------------------------------------------------------------
+# Rule for making .mexmaci64 files from .cc files
+#-----------------------------------------------------------------------
+
+$(BIN_EXE_PREFIX)%.mexmaci64: $(BIN_PREFIX)%.cc
+	$(MEX) $< $(MEXFLAGS) $(GENERIC_FLAGS) $(CCINC) $(MATLIBS) -output $(@)
+
+#=======================================================================
+# PYTHON file compilation
+#=======================================================================
+
+ifneq ($(PYTHON_INC_PATH),)
+  CCINC += -I$(PYTHON_INC_PATH)
+endif
+
+ifneq ($(NUMPY_INC_PATH),)
+  CCINC += -I$(NUMPY_INC_PATH)
+endif
+
+#-----------------------------------------------------------------------
+# List of PY files to compile.  If the PY headers are not present,
+# this should be left blank
+#-----------------------------------------------------------------------
+
+PYOBJ = 
+ifneq ($(PYTHON_INC_PATH),)
+  PYALLOBJ  =  $(patsubst %.cc,%.pyso,$(wildcard $(BIN_PREFIX)Py*.cc)) 
+  PYOBJPYSO = $(subst $(BIN_PREFIX),$(BIN_EXE_PREFIX),$(PYALLOBJ))
+endif
+
+python_bins: $(PYOBJPYSO)
+
+#-----------------------------------------------------------------------
+# Rule for making .pyso files from .cc files
+#-----------------------------------------------------------------------
+
+PYFLAGS = -fPIC 
+
+# This rule 
+
+$(BIN_EXE_PREFIX)%.pyso: $(BIN_PREFIX)%.cc
+	$(TOP)/bin/$(BIN_EXE_PREFIX)PythonGenerator file=$< dir=$(TOP)/python \
+	suffix=pycc prefix=$(BIN_EXE_PREFIX)$*
+	$(CC) $(CCFLAGS) $(PYFLAGS) $(CCINC) -x c++ -c -o $(BIN_EXE_PREFIX)$*.pyso $(BIN_EXE_PREFIX)$*.pycc
+	$(CC) $(LIBSO_FLAGS) -o $(BIN_EXE_PREFIX)$*.so $(PYLIBS) $(BIN_EXE_PREFIX)$*.pyso
+	\rm -f $(BIN_EXE_PREFIX)$*.pycc
+
+#=======================================================================
+# Generic rules
+#=======================================================================
+
+# Rule for making .o files from .cc files
+
+%.o: %.cc
+	echo "python path is " $(PYTHON_INC_PATH)
+	$(CC) $(CCFLAGS) $(CCINC) -DHOST="\"$(HOSTNAME)\"" -DNAMESERVER="\"$(HOSTNAME):4000\"" -DEVENTSERVER="\"$(HOSTNAME):4001\"" -DCALFILE="\"$(SZA)/array/conf/cal\"" -c -o $@ $<
+
+%.o: %.c
+	$(CC) $(CCFLAGS) $(CCINC) -DHOST="\"$(HOSTNAME)\"" -DNAMESERVER="\"$(HOSTNAME):4000\"" -DEVENTSERVER="\"$(HOSTNAME):4001\"" -DCALFILE="\"$(SZA)/array/conf/cal\"" -c -o $@ $<
+
+#=======================================================================
+# Doxygen documentation
+#=======================================================================
+
+# We have to make a phony target so that make will proceed even if
+# there is a file/dir under the current directory with the same name
+
+.PHONY : dox
+
+dox:
+	@echo ' ';echo 'Making Doxygen documentation'; echo ' '
+	doxygen Doxyfile.cfg
+
+clean_dox:
+	@echo ' ';echo 'Removing dox directory'; echo ' '
+	/bin/rm -rf dox
+
+#=======================================================================
+# Library generation: including Makefile should just have to define
+# variable LIBSO_PREFIX
+#=======================================================================
+
+# List the dependencies by substituting from the source directory.
+# This will cause the .o files to be made if they do not already
+# exist.  Otherwise if .o files don't already exist, the library will
+# be made without complaint with no targets
+
+# In wildcard, we use only files beginning with capitals, since these
+# are the class definitions.  Otherwise, threadserver.o and
+# threadclient.o would get built into the library
+
+CCLIBOBJ =  $(patsubst %.cc,%.o,$(wildcard [A-Z]*.cc)) 
+CLIBOBJ  =  $(patsubst %.c,%.o,$(wildcard *.c)) 
+
+ifndef LIBOBJ
+  LIBOBJ  = $(CCLIBOBJ)
+  LIBOBJ += $(CLIBOBJ)
+endif
+
+# If this is a matlab library, and no mex compiler is present, reset
+# the list of object files
+
+ifneq ($(MATLAB),)
+
+  ifeq ($(MEX),)
+    LIBOBJ = 
+  endif
+
+  ifeq ($(MATLAB_PATH),)
+    LIBOBJ = 
+  endif
+
+endif
+
+LIBSO = $(LIBSO_PREFIX)$(LIBSO_SUFFIX)
+
+$(LIBDIR)/$(LIBSO): $(LIBOBJ)
+	g++ $(LIBSO_FLAGS) -o $(LIBDIR)/$(LIBSO) $(LIBOBJ)
+
+libs: 	depend $(LIBOBJ)
+	@if [ ! -d $(LIBDIR) ] ; then mkdir $(LIBDIR) ; fi ;
+	$(MAKE) $(LIBDIR)/$(LIBSO); 
+
+#=======================================================================
+# Binary generation
+#=======================================================================
+
+BINALLOBJ = $(patsubst %.cc,%,$(wildcard $(BIN_PREFIX)*.cc)) 
+BINOBJ = $(subst $(BINEXC),,$(BINALLOBJ))
+EXEOBJ = $(subst $(BIN_PREFIX),$(BINDIR)/$(BIN_EXE_PREFIX),$(BINOBJ))
+
+generic_bins: depend $(EXEOBJ)
+	@if [ ! -d $(BINDIR) ] ; then mkdir $(BINDIR) ; fi ;
+
+# Rule for making binaries
+
+$(BINDIR)/$(BIN_EXE_PREFIX)%: $(BIN_PREFIX)%.o
+	$(CC) -o $@ $(CCFLAGS) $< $(LDPATH) $(RPATH) $(LIBS)
+
+#=======================================================================
+# Directive for compiling test programs
+#=======================================================================
+
+TESTALLOBJ =  $(patsubst %.cc,%,$(wildcard t*.cc)) 
+TESTOBJ     = $(filter-out $(BINEXC),$(TESTALLOBJ))
+
+#t%: t%.o
+#	$(FC) $(FC_FLAGS) -o $@ $(LDPATH) $(RPATH) $(LIBS) $(PGLIB) $(PGLD) $(FC_PG_RPATH) $(X11LD) -lXmu -lpng $<
+
+t%: t%.o
+	$(CC) -o $@ $(CCFLAGS) $< $(LDPATH) $(RPATH) $(LIBS)
+
+generic_test: depend $(TESTOBJ)
+
+test: generic_test
+
+#=======================================================================
+# Include the file in which automatic dependencies are deposited by
+# make depend, above.  But only if it exists.  If not, the rule for
+# depend, below, will make it.  Don't include Makefile.rules until
+# after the desired default target is defined, or Makefile.rules will
+# determine the default target for you!
+#=======================================================================
+
+MAKERULES := $(wildcard Makefile.rules)
+
+ifeq ($(MAKERULES), Makefile.rules)
+	RULES_EXISTS = y
+	include Makefile.rules
+else
+	RULES_EXISTS = n
+endif
+
+#-----------------------------------------------------------------------
+# Make dependencies, if they don't already exist
+#-----------------------------------------------------------------------
+
+ifndef RULESFILES
+  RULESFILES  =  $(wildcard [A-Z]*.cc)
+  RULESFILES +=  $(wildcard t*.cc)
+  RULESFILES +=  $(wildcard *.c)
+  RULESFILES +=  $(wildcard $(BIN_PREFIX)*.cc)
+endif
+
+# If Makefile.rules doesn't exist (see above), executing this rule
+# will cause it to be made and sourced.
+
+dependCheck:
+ifeq ($(RULES_EXISTS),n) 
+	$(CC) $(CCFLAGS) $(OPTIONS) $(CCINC) -MM $(RULESFILES) > Makefile.rules 
+	@set -e; [ -s Makefile.rules ] ;
+	@echo $(RULESFILES) > Makefile.rules.fileList ;
+	\cp -f Makefile.rules.fileList Makefile.rules.fileList_old ;
+else 
+	@if [ -f Makefile.rules.fileList ] ; then \mv -f Makefile.rules.fileList Makefile.rules.fileList_old ; fi ;
+	@echo $(RULESFILES) > Makefile.rules.fileList ;
+endif
+
+depend: dependCheck
+ifneq (,$(shell diff Makefile.rules.fileList Makefile.rules.fileList_old))
+	@set -e; [ -s Makefile.rules ] ;
+	@echo 'files are different'
+else
+	@echo 'files are the same'
+endif
+
+#=======================================================================
+# Clean directives
+#=======================================================================
+
+clean_bins:
+	\rm -f $(EXEOBJ)
+
+clean_test_bins:
+	\rm -f $(TESTOBJ)
+
+clean_depend:
+	\rm -f Makefile.rules*
+
+clean_files:
+	\rm -f *.o
+	\rm -f *.mex*
+	\rm -f *.pycc
+	\rm -f *.pyso
+
+clean_libs:
+	\rm -f $(LIBDIR)/$(LIBSO)
+	\rm -f *.so
+
+clean_test: clean_test_bins clean_files
+
+clean: clean_bins clean_depend clean_files clean_libs

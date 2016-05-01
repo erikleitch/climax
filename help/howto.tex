@@ -1,0 +1,362 @@
+\section{Quickstart Guide}
+
+\subsection{Introduction}
+
+Currently, \climax\ consists of a single binary, \$\{CLIMAX\_SRC\}/bin/\climaxb\, which is
+entirely driven by parameter files; no command-line options except the
+parameter file name are supported, so that runs can be exactly
+reproduced from the contents of the parameter file.  The binary can be run like:
+
+\begin{myindentpar}{3cm}
+climaxRunManager file=myParameterFile
+\end{myindentpar}
+
+Additionally, a simple Python hook is provided with the code, which
+is compiled into the loadable module
+\$\{CLIMAX\_SRC\}/python/climaxPyTest.so (if PYTHON\_INC\_PATH is
+defined in Makefile.directives when the code is built).  To use the
+code from Python, do:
+
+\begin{myindentpar}{3cm}
+import climaxPyTest\\
+res = climaxPtTest.run('myParameterFile')
+\end{myindentpar}
+
+where 'res' will contain a dictionary of parameter values, 1-sigma
+confidence limits, and other information.
+
+One goal of the code documentation is that it be self-describing as
+much as possible; this means that any error in the parameter file
+should generate a usage message with information on valid options, or
+instructions on how to fix syntactical errors.  Run \climaxb\ with
+no options to get started.
+
+\subsection{Theory of Operation}
+
+The general structure of parameter files is designed around defining
+datasets and models, using the commands {\tt adddataset} and {\tt
+  addmodel}.  To see a list of recognized datasets (or models), just
+enter one of these commands with in invalid type.  Datasets in
+\climax\ are aware of which models can apply to them, and by default
+all models will be fit to any datasets to which they apply.  This
+behavior can be modified by using the {\tt exclude} command to exclude
+models from particular datasets (see \S~\ref{sec:datasets}).
+
+Once datasets and models are declared, \climaxb\ can do one of several
+things, depending on control parameters in the parameter file: by
+default it will run a Markov chain for any variable model components,
+but it can also display datasets, models and residuals, compute
+chi-squared for defined datasets and models, load and display output
+chains, or generate simulated data for a dataset type if the dataset
+supports it.  What it does is determined by global control parameters,
+detailed in \S~\ref{sec:control}.
+
+\subsection{Defining Datasets}
+\label{sec:datasets}
+
+Once a dataset is declared, the user can set individual parameters of
+the dataset by name.  For example, to declare an interferometric UVF
+dataset, you would use:
+
+\begin{myindentpar}{3cm}
+adddataset type=uvf name=duvf;
+\end{myindentpar}
+
+which declares a new dataset of type 'uvf' and associates the name
+'duvf' with it. Parameters of this dataset can subsequently be
+declared like:
+
+\begin{myindentpar}{3cm}
+duvf.file = /path/to/my/uvf/filename;
+\end{myindentpar}
+
+To see a list of recognized parameters for a dataset, just set an
+invalid parameter for that dataset.
+
+If desired, models can be excluded from particular datasets by using
+the \code{exclude} meethod.  For example,
+
+\begin{myindentpar}{3cm}
+duvf.exclude(model1);
+\end{myindentpar}
+
+would prevent \code{model1} from being fit to \code{duvf}.  This
+allows greater flexibility in the way that chains are run.  For
+example, for data from an instrument like the SZA, you can
+dramatically increase the speed of fitting cluster and point source
+models by loading the data twice, once with a uvmax of $2 k\lambda$
+(short-baseline data) and once with a uvmin of $2 k\lambda$
+(long-baseline data), fitting a point-source model to both, but
+excluding the cluster model from the long baseline data, which have no
+sensitivity to it anyway.  This is because the cluster fitting will
+only require Fourier inversion of the short-baseline data, which can
+be coarsely gridded and quickly inverted, while the point-source
+models are fit directly on the Fourier plane and require no inversion
+of the models for either dataset.
+
+\subsection{Defining Models}
+\subsubsection{Adding Models}
+Models can contain both parameters and potentially variable
+components.  To see a list of recognized parameters and components for
+a model, just set an invalid parameter for that model.
+
+If a component is assigned a specific value in the
+parameter file, it is held fixed at that value.  For example
+
+\begin{myindentpar}{3cm}
+addmodel type=betamodel name=model1;\\
+model1.beta = 0.8;
+\end{myindentpar}
+
+defines a \betamodel\ with a fixed value for the $\beta$ parameter.
+If a component is instead specified with a prior, then that component
+is treated as variable.  For example,
+
+\begin{myindentpar}{3cm}
+model1.beta = 0.6:0.8;
+\end{myindentpar}
+
+would define a \betamodel\ with a uniform prior of $\{0.6, 0.8\}$ for
+the $\beta$ parameter.  On a more subtle note, for the Metropolis-Hastings algorithm,
+\climax\ by default selects the center of any uniform prior as the
+starting mean for the jumping distribution.  You can override this
+behavior by optionally specifying a starting mean explicitly.  The
+specification
+
+\begin{myindentpar}{3cm}
+model1.beta = 0.65:0.6:0.8;
+\end{myindentpar}
+
+for example would set the same uniform prior but initialize the
+jumping distribution with a mean of 0.65.  Alternately, you can assign
+a Gaussian prior, via:
+
+\begin{myindentpar}{3cm}
+model1.beta = 0.7 +- 0.1;
+\end{myindentpar}
+
+Model components with units must be specified in a valid unit for that
+component.  For example, to specify the radio normalization of the
+\betamodel\ you could use:
+
+\begin{myindentpar}{3cm}
+model1.Sradio = -2000:-500 muK;
+\end{myindentpar}
+
+to set a prior in micro-Kelvin.  Enter an invalid unit to see what
+units are supported for each model component.  Additionally,
+\climax\ will allow any numerical scaling from a recognized unit.  For
+example:
+
+\begin{myindentpar}{3cm}
+m.m500 = 1e15:5e15 Msolar;
+\end{myindentpar}
+
+and 
+
+\begin{myindentpar}{3cm}
+m.m500 = 1:5 1e15Msolar;
+\end{myindentpar}
+
+are both valid specifications for a model with mass parameter 'm500'.
+
+\subsubsection{Removing Models}
+
+Models can be removed from the data prior to any operations by using
+the \code{remmodel} keyword.  Models are defined just as with
+\code{addmodel}, but are subtracted from the data prior to fitting or
+imaging.
+
+\subsubsection{Correlating Model Parameters}
+
+You can set any model parameter equal to another (symbolic) model
+parameter, provided they are of the same type.  This links the two
+parameters together, with only the first parameter sampled by the
+Markov chain.  For example:
+
+\begin{myindentpar}{3cm}
+addmodel type=betamodel name=beta;\\
+addmodel type=ptsrc name=pt;\\
+\\
+beta.xoff = -0.01:0.01 deg;\\
+beta.yoff = -0.01:0.01 deg;\\
+\\
+pt.xoff = beta.xoff;\\
+pt.yoff = beta.yoff;
+\end{myindentpar}
+
+would fit a cluster and a point source, with the location of the point
+source fixed to the cluster center.  This can be useful in other
+contexts too; for example, i n combination with model exclusion (see
+\S\ref{sec:datasets}), it could be used to tie together physical model
+parameters when two datasets have an unphysical offset between them,
+e.g.:
+
+\begin{myindentpar}{3cm}
+adddataset type=uvf name=sz;\\
+adddataset type=xrayimage name=xray;\\
+\\
+addmodel type=betamodel name=msz;\\
+msz.Sradio = -2000:0 muK;\\
+msz.xoff = -0.01:0.01 deg;\\
+msz.yoff = -0.01:0.01 deg;\\
+msz.beta = 0.1:0.8;\\
+msz.thetaCore = 0.1:1.0';\\
+\\
+addmodel type=betamodel name=mx;\\
+mx.Sxray   = 0:2000 counts;\\
+mx.xoff = -0.01:0.01 deg;\\
+mx.yoff = -0.01:0.01 deg;\\
+mx.beta = msz.beta;\\
+mx.thetaCore = msz.thetaCore;\\
+\\
+sz.exclude(mx);\\
+xray.exclude(msz);
+\end{myindentpar}
+
+defines a beta model with independent offsets between the radio and
+xray datasets, but with linked \code{beta} and \code{thetaCore}
+parameters.
+
+\subsection{Global Control Parameters}
+\label{sec:control}
+
+In addition to commands declaring datasets and models,
+\climax\ parameters files support global parameters that control what
+\climax\ does with the parameter file.  
+
+\subsubsection{Running Markov Chains}
+
+By default, \climax\ will attempt to run a Markov chain for any
+variable model components.  The total length of the chain and the
+length of the burn-in sequence can be controlled by parameters
+\code{ntry} amd \code{nburn}, respectively.
+
+By default, \climax\ will attempt to display parameter histogram
+plots, data and residuals with the best-fit model at the end of the
+chain.  You can use the \code{dev} parameter to redirect the plots to
+device other than the screen (\code{\slash dev\slash null} or a
+hardcopy device).  \climax\ uses \code{pgplot} for graphics and
+expects the usual pgplot device specifications.  For example, to run a
+chain with 10000 total iterations and burn-in length of 3000, and
+redirect the plot to a postscript file \code{climax.ps}, do
+
+\begin{myindentpar}{3cm}
+ntry = 10000;\\
+nburn = 3000;\\
+dev = climax.ps/vcps;
+\end{myindentpar}
+
+\subsubsection{Displaying Datasets and Models}
+
+If the \code{display} parameter is set to \code{true}, \climax\ will
+instead attempt to display any defined datasets, along with residuals
+against any defined models. Naturally this requires that models be
+defined with fixed parameters, and \climax\ will report an error if
+any required model parameters are not defined, or are specified with
+priors.
+
+In addition, some datasets support their own \code{display}
+parameters, which are executed when the datasets are loaded,
+independent of what the parameter file instructs \climax\ to do.  Thus:
+
+\begin{myindentpar}{3cm}
+adddataset type=uvf name=duvf;\\
+duvf.display = true;
+\end{myindentpar}
+
+will cause the dataset to be displayed first, whether running a Markov
+chain or creating residual plots.
+
+\subsubsection{Outputting Chains}
+
+By default, parameter chains are stored internally, and are displayed
+as histogram plots at the end of a chain.  The chain is not however
+written to disk unless you explicitly instruct \climax\ to do so.
+Both of these behaviors can be modified by using the \code{store} and
+\code{output} keywords.  To turn off internal storage (say, for a very
+long chain, for which storage would create a large memory footprint), use
+
+\begin{myindentpar}{3cm}
+store = false;
+\end{myindentpar}
+
+To output the chain to a file, use:
+
+\begin{myindentpar}{3cm}
+output file=/path/to/my/output/filename;
+\end{myindentpar}
+
+\subsubsection{Reading Chains Back into \climax}
+
+You can instruct \climaxb\ to load chain files written by \climax\ (or
+even \markov) by using the command
+
+\begin{myindentpar}{3cm}
+load file=/path/to/my/output/filename;
+\end{myindentpar}
+
+This will load the file, in whatever units the parameters are
+specified, and create parameter histograms, as at the end of an
+internal \climax\ Markov chain run.
+
+\newpage
+\subsection{Examples}
+
+\begin{myindentpar}{3cm}
+\small
+\begin{verbatim}
+//============================================================
+// An example of fitting a beta model to short-baseline SZA data
+//============================================================
+
+//------------------------------------------------------------
+// Add the data set
+//------------------------------------------------------------
+
+adddataset name=duvf type=uvf;
+duvf.file = ~eml/projects/climax/climaxTestSuite/A1914.uvf;
+duvf.uvmin = 0;
+duvf.uvmax = 2000;
+
+//------------------------------------------------------------
+// Add the beta model
+//------------------------------------------------------------
+
+addmodel name=m_cluster type=betamodel;
+
+//------------------------------------------------------------
+// Assign values to fixed model parameters
+//------------------------------------------------------------
+
+m_cluster.beta = 0.8;
+m_cluster.axialRatio = 1;
+m_cluster.rotang    = 0 degrees;
+m_cluster.spectralType = sz;
+m_cluster.normalizationFrequency = 30 GHz;
+
+//------------------------------------------------------------
+// Assign priors to parameters we want to fit
+//------------------------------------------------------------
+
+m_cluster.thetaCore = 5:295";
+m_cluster.Sradio = -5:0 mK;
+m_cluster.xoff   = -60:60";
+m_cluster.yoff   = -60:60";
+
+//------------------------------------------------------------
+// Directives controlling the run itself
+//------------------------------------------------------------
+
+ntry  = 10000;
+nburn = 3000;
+nbin  = 50;
+
+//------------------------------------------------------------
+// Display to Pgplot window 1
+//------------------------------------------------------------
+
+dev = 1/xs;
+\end{verbatim}
+\end{myindentpar}
+

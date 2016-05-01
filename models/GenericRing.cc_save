@@ -1,0 +1,112 @@
+#include "gcp/models/GenericRing.h"
+
+using namespace std;
+using namespace gcp::models;
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+GenericRing::GenericRing() 
+{
+  addComponent(radius_);
+  addComponent(width_);
+  addComponent(axialRatio_);
+
+  addComponentName(axialRatio_, "axialRatio", "The axial ratio (min/maj), for non-circularly symmetric models");
+  addComponentName(radius_,    "radius",      "Radius of the major axis");
+  addComponentName(width_,     "width",       "Width of the ring");
+
+  axialRatio_.allowUnitless(true);
+  axialRatio_.setVal(1.0, "");
+
+  initializeComponentsToFixed();
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+GenericRing::~GenericRing() {}
+
+/**.......................................................................
+ * Set the major axis radius
+ */
+void GenericRing::setRadius(gcp::util::Angle radius)
+{
+  radius_.setVal(radius.arcmin(), "arcmin");
+  radius_.wasSpecified_ = true;
+}
+
+/**.......................................................................
+ * Set the width
+ */
+void GenericRing::setWidth(gcp::util::Angle width)
+{
+  width_.setVal(width.arcmin(), "arcmin");
+  width_.wasSpecified_ = true;
+}
+
+/**.......................................................................
+ * Set the axial ratio
+ */
+void GenericRing::setAxialRatio(double ratio)
+{
+  axialRatio_.setVal(ratio, "");
+  axialRatio_.wasSpecified_ = true;
+}
+
+/**.......................................................................
+ * Evaluate the dimensionless shape of this profile
+ */
+double GenericRing::envelope(unsigned type, double xRad, double yRad)
+{
+  double majRad = radius_.radians();
+  double minRad = majRad * axialRatio_.val_;
+  double arg = 0.5 * ((xRad * xRad)/(majSigRad * majSigRad) + (yRad * yRad)/(minSigRad * minSigRad));
+
+  return exp(-arg);
+}
+
+/**.......................................................................
+ * Evaluate the dimensionless shape of this profile
+ */
+double GenericRing::envelope(void* evalData, unsigned type, double xRad, double yRad)
+{
+  GenericRingEvalData* stack = (GenericRingEvalData*)evalData;
+  stack->arg_ = 0.5 * ((xRad * xRad)/(stack->majSigRad_ * stack->majSigRad_) + (yRad * yRad)/(stack->minSigRad_ * stack->minSigRad_));
+  return exp(-stack->arg_);
+}
+
+void* GenericRing::allocateEvalData()
+{
+  return new GenericRingEvalData();
+}
+
+void GenericRing::initializeEvalData(void* evalData)
+{
+  GenericRingEvalData* stack = (GenericRingEvalData*)evalData;
+
+  stack->majRad_   = radius_.radians();
+  stack->minRad_   = stack->majRad_ * axialRatio_.val_;
+  stack->widthRad_ = width_.radians();
+
+  return;
+}
+
+/**.......................................................................
+ * Check this model's setup for sense
+ */
+void GenericRing::checkSetup()
+{
+  Generic2DAngularModel::checkSetup();
+
+  checkVar("axialRatio");
+  checkVar("radius");
+  checkVar("width");
+}
+
+PgModel GenericRing::pgModel()
+{
+  PgModel mod;
+  return mod;
+}

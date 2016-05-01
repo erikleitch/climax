@@ -1,0 +1,93 @@
+#include <iostream>
+#include <math.h>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/models/GaussianClusterModel.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Exception.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Dft2d.h"
+#include "gcp/fftutil/Image.h"
+
+#include "gcp/models/BetaModel.h"
+
+#include "cpgplot.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+using namespace gcp::models;
+
+KeyTabEntry Program::keywords[] = {
+  { "dev",      "/xs",            "s", "Pgplot device"},
+  { "file",     "/Users/eml/projects/carma/clusterObs/macsj0553.fits", "s", "FITS file to read in"},
+  { "outfile",  "",               "s", "FITS file to write out"},
+  { "zeropad",  "f",              "b", "Zeropad the array?"},
+  { "phase",    "0.0",            "d", "Phase (degrees)"},
+  { "period",   "64",             "d", "Period (pixels)"},
+  { "freq",     "30",             "d", "freq (GHz)"},
+  { "amp",      "1",              "d", "amplitude"},
+  { "size",     "1.0",            "s", "size (degrees)"},
+  { "rotang",   "45.0",           "s", "rotation angle (degrees)"},
+  { "minsig",   "2.0",            "d", "min sigma (arcmin)"},
+  { "majsig",   "2.0",            "d", "maj sigma (arcmin)"},
+  { "xoff",     "1.0",            "d", "x offset (arcmin)"},
+  { "yoff",     "1.0",            "d", "y offset (arcmin)"},
+  { "min",      "0.0",            "d", "zmin"},
+  { "max",      "0.0",            "d", "zmax"},
+  { "cutoff",   "3.0",            "d", "cutoff"},
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+
+int Program::main()
+{
+  Image image1,image2,image3;
+  image1.initializeFromFitsFile("/Users/eml/projects/climax/climaxTestSuite/ms0735/new/restapernone.fits");
+  image2.initializeFromFitsFile("/Users/eml/projects/climax/climaxTestSuite/ms0735/new/restaper0.5.fits");
+  image3.initializeFromFitsFile("/Users/eml/projects/climax/climaxTestSuite/ms0735/new/restaper0.1.fits");
+
+  PgUtil::open("/xs");
+  PgUtil::subplot(4,1);
+  PgUtil::setWnad(true);
+
+  double cutoff = Program::getDoubleParameter("cutoff");
+
+  image1 *= -1;
+  image2 *= -1;
+  image3 *= -1;
+
+  PgUtil::setZmin(0);
+  PgUtil::setZmax(image1.max());
+  image1.display();
+
+  PgUtil::setZmin(0);
+  PgUtil::setZmax(image2.max());
+  image2.display();
+
+  PgUtil::setZmin(0);
+  PgUtil::setZmax(image3.max());
+  image3.display();
+
+  Image image = image3;
+
+  image1.invalidateDataLessThan(cutoff);
+  image2.invalidateDataLessThan(cutoff);
+
+  //  image.addImage(image1,Image::OPER_AVERAGE);
+  image.addImage(image2,Image::OPER_AVERAGE);
+
+  PgUtil::setZmin(0);
+  PgUtil::setZmax(image.max());
+
+  image.display();
+  return 0;
+}
+

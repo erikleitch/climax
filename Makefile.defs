@@ -1,0 +1,473 @@
+#=======================================================================
+# Required environment variable
+#=======================================================================
+
+SHELL = /bin/sh
+
+ifndef CLIMAX_TOOLS
+ $(error CLIMAX_TOOLS has not been defined. This environment variable should point to the directory where climaxTools has been installed)
+endif
+
+TOOLSDIR = $(CLIMAX_TOOLS)
+export TOOLSDIR
+
+#=======================================================================
+# Directories
+#=======================================================================
+
+# Check if CLIMAXSRC is already defined.  This may be because this
+# Makefile was included from another Makefile, in which case don't
+# redefine the path.  Else define CLIMAXSRC to be the current directory
+
+ifeq ($(CLIMAX_SRC),) 
+ $(Warning: CLIMAX_SRC has not been defined. This environment variable should point to the directory where climaxSrc has been installed)
+  CLIMAX_SRC := $(shell pwd)
+endif
+
+TOP = $(CLIMAX_SRC)
+export CLIMAX_SRC
+export TOP
+
+#-----------------------------------------------------------------------
+# Project specific defines
+#-----------------------------------------------------------------------
+
+PROJ_PREFIX := Climax
+BIN_PREFIX  := climax
+
+export PROJ_PREFIX
+export BIN_PREFIX
+
+#-----------------------------------------------------------------------
+# All other directories are derived from the top-level directory
+#-----------------------------------------------------------------------
+
+export TOP
+export HOST
+
+BINDIR    = $(TOP)/bin
+HELPDIR   = $(TOP)/help
+LIBDIR    = $(TOP)/lib
+SCRIPTDIR = $(TOP)/scripts
+
+export BINDIR
+export HELPDIR
+export LIBDIR
+export SCRIPTDIR
+
+# Include directories
+
+INC   = -I$(TOP)
+INC  += -I$(TOOLSDIR)/include
+
+CCINC = $(INC)
+
+export INC
+export CCINC
+
+#-----------------------------------------------------------------------
+# Makefile.directives should contain environment variables
+# which will control how the code is compiled.  Make sure these are
+# defined.
+#
+# Makefile.directives is derived from a template file called 
+# Makefile.directives.template.  After a fresh checkout, 
+# Makefile.directives can be created by the make_make_directives rule.  
+# If no Makefile.directives file exists, it will be automatically created
+# from the template file.
+#
+# See if any directives have changed since the last time we compiled,
+# and store the new values.
+#-----------------------------------------------------------------------
+
+DIRECTIVES := $(wildcard $(TOP)/Makefile.directives)
+ifeq ($(DIRECTIVES), $(TOP)/Makefile.directives)
+  include $(TOP)/Makefile.directives
+else 
+  include $(TOP)/Makefile.directives.template
+endif
+
+# Once Makefile.directives has been sourced, the following variables
+# should be defined.  Complain and exit if any of them are not.
+
+ifeq ($(strip $(COMPILE_WITH_DEBUG)),)
+ $(error COMPILE_WITH_DEBUG (1/0) has not been defined.  Set up your environment)
+endif
+
+LDPATH   = -L/usr/lib
+LDPATH  += -L/usr/local/lib
+
+ifneq ($(GFORTRAN_LD_PATH),)
+	LDPATH  += -L$(GFORTRAN_LD_PATH)
+	GFORTRANLIB = -L$(GFORTRAN_LD_PATH) -lgfortran
+else
+	GFORTRANLIB = -lgfortran
+endif
+
+LDPATH  += -L$(LIBDIR)
+LDPATH  += -L$(TOOLSDIR)/lib
+
+export LDPATH
+
+RPATH    = -Xlinker -R -Xlinker /usr/lib
+RPATH   += -Xlinker -R -Xlinker /usr/local/lib
+RPATH   += -Xlinker -R -Xlinker $(LIBDIR)
+RPATH   += -Xlinker -R -Xlinker $(TOOLSDIR)/lib
+
+export RPATH
+
+CC = g++
+
+export CC
+
+#-----------------------------------------------------------------------
+# Now check for things that we can determine from the system
+#-----------------------------------------------------------------------
+
+ifneq (,$(findstring Darwin,$(shell uname -a)))
+
+  MAC_OSX = 1
+
+  PROC := $(shell uname -m)
+  ifeq ($(strip $(PROC)),i386)
+    COMPILE_FOR_64BIT = 0
+    X11LD = -L/usr/X11R6/lib -lX11
+    MATX11LD = -L/usr/X11R6/lib -lX11
+  else
+    COMPILE_FOR_64BIT = 1
+    X11LD = -L/usr/X11R6/lib -lX11
+    MATX11LD = -L/usr/X11R6/lib -lX11
+  endif
+
+  HAVE_RT     = 0
+  HAVE_MATLAB = 0
+  HAVE_VIDEO  = 0
+
+else
+
+  MAC_OSX = 0
+
+  PROC := $(shell uname -i)
+  ifeq ($(strip $(PROC)),i386)
+    COMPILE_FOR_64BIT = 0
+    X11LD = -L/usr/X11R6/lib -Xlinker -R/usr/X11R6/lib -lX11
+    MATX11LD = -L/usr/X11R6/lib -lX11
+  else
+    COMPILE_FOR_64BIT = 1
+    X11LD = -L/usr/X11R6/lib64 -Xlinker -R/usr/X11R6/lib64 -lX11
+    MATX11LD = -L/usr/X11R6/lib64 -lX11
+  endif
+
+  HAVE_RT     = 1
+  HAVE_VIDEO  = 1
+  HAVE_MATLAB = 0
+
+  #ifneq (,$(findstring usr,$(shell which mex)))
+  #  HAVE_MATLAB = 1
+  #endif
+
+  ifneq (,$(findstring opt,$(shell which mex)))
+    HAVE_MATLAB = 1
+  endif
+
+endif
+
+ifneq ($(NUMPY_INC_PATH),)
+  HAVE_NUMPY = 1
+else
+  HAVE_NUMPY = 0
+endif
+
+#-----------------------------------------------------------------------
+# Now override COMPILE_FOR_64BIT depending on the ARCH variable
+#-----------------------------------------------------------------------
+
+ifeq (i386,$(strip $(ARCH)))
+  COMPILE_FOR_64BIT = 0
+  BITFLAG = -m32
+else
+  ifeq (x86_64,$(strip $(ARCH)))
+    COMPILE_FOR_64BIT = 1
+    BITFLAG = -m64
+  endif
+endif
+
+#-----------------------------------------------------------------------
+# These must be individually exported or a later substitution in a sub
+# make file on SPECIFIC_FLAGS won't work. There must be a way to get
+# SPECIFIC_FLAGS to expand these on-definition below, but I don't know
+# how to do it.
+#-----------------------------------------------------------------------
+
+export ARCH
+export COMPILE_WITH_DEBUG
+export COMPILE_FOR_64BIT
+export MATLAB_PATH
+export NUMPY_INC_PATH
+export PYTHON_INC_PATH
+
+export MAC_OSX
+export HAVE_RT
+export HAVE_MATLAB
+export HAVE_NUMPY
+export HAVE_VIDEO
+export X11LD
+export MATX11LD
+
+# Create a flag string we can export to avoid having to explicitly
+# construct this mess in each makefile below us
+
+export SPECIFIC_FLAGS := \
+	-DCOMPILE_WITH_DEBUG=$(COMPILE_WITH_DEBUG) \
+	-DCOMPILE_FOR_64BIT=$(COMPILE_FOR_64BIT) \
+	-DMAC_OSX=$(MAC_OSX) \
+	-DHAVE_RT=$(HAVE_RT) \
+	-DHAVE_VIDEO=$(HAVE_VIDEO) \
+	-DHAVE_NUMPY=$(HAVE_NUMPY) \
+	-DMATLAB_PATH=$(MATLAB_PATH) \
+	-DPYTHON_INC_PATH=$(PYTHON_INC_PATH) \
+	-DNUMPY_INC_PATH=$(NUMPY_INC_PATH) \
+	-DSCRIPTDIR="\"$(SCRIPTDIR)\""
+
+#-----------------------------------------------------------------------
+# See if directives have changed.  The make_directives rule causes the
+# current flags to be written into a file Makefile.directives.last.
+# If this file exists in the current directory, source it now, to
+# check the last value of each flag against the current one.
+#-----------------------------------------------------------------------
+
+OLDDIRECTIVES := $(wildcard Makefile.directives.last)
+
+# If the file exists, OLDDIRECTIVES should be non-empty on return from
+# the wildcard function
+
+ifeq ($(OLDDIRECTIVES), Makefile.directives.last)
+
+  include Makefile.directives.last
+
+  DIR_HAVE_CHANGED = n
+
+  ifneq ($(COMPILE_WITH_DEBUG), $(OLD_COMPILE_WITH_DEBUG))
+    DIR_HAVE_CHANGED = y
+  endif
+
+# If the file doesn't exist, assume that directives have changed
+
+else
+  DIR_HAVE_CHANGED = y
+endif
+
+export DIR_HAVE_CHANGED
+
+BIN_EXE_PREFIX = $(BIN_PREFIX)
+
+export BIN_PREFIX
+export BIN_EXE_PREFIX
+
+#-----------------------------------------------------------------------
+# Set up flags for shared library compilation.  Under g++ version
+# 4.0.0, at least the Mac OS X version, -shared is no longer a valid
+# option
+#-----------------------------------------------------------------------
+
+PGLIB = $(TOOLSDIR)/lib
+
+PGLD             = -L$(PGLIB) $(FC_PG_PATH) -lcpgplot -lpgplot
+
+ifneq (,$(findstring Darwin,$(shell uname -a)))
+  CFITSLIBSO_FLAGS  = -dynamiclib -flat_namespace -undefined suppress
+  LIBSO_FLAGS       = -dynamiclib -undefined dynamic_lookup
+  LIBSO_SUFFIX      = .dylib
+  FC                = g++
+  FC_FLAGS          = -bind_at_load
+  FC_DYNAMIC        = -Xlinker -dynamic
+  FC_STATIC         = -Xlinker -static
+  FC_PG_PATH        = 
+  RPATH             =
+  RTLIB             =
+  PGLD             += -lg2c
+  PGLD             += $(GFORTRANLIB)
+else
+  CFITSLIBSO_FLAGS  = -shared
+  LIBSO_FLAGS       = -shared
+  LIBSO_SUFFIX      = .so
+  FC                = gfortran
+  FC_FLAGS          = 
+  FC_DYNAMIC       = -Xlinker -Bdynamic
+  FC_STATIC        = -Xlinker -Bstatic
+  FC_PG_PATH       = -Xlinker -R$(PGLIB)
+  RPATH            = -Xlinker -R -Xlinker $(LIBDIR)
+  RTLIB            = -lrt
+endif
+
+FC_FLAGS    += $(BITFLAG)
+LIBSO_FLAGS += $(BITFLAG)
+
+export LIBSO_FLAGS
+export CFITSLIBSO_FLAGS
+export LIBSO_SUFFIX
+export FC
+export FC_FLAGS
+export FC_DYNAMIC
+export FC_STATIC
+export FC_PG_PATH
+export RPATH
+export RTLIB
+export PGLD
+
+#-----------------------------------------------------------------------
+# Set up CCFLAGS
+#-----------------------------------------------------------------------
+
+# C++ standard library is supposed to be threadsafe with -D_REENTRANT
+
+CCFLAGS += -D_REENTRANT
+CCFLAGS += -D_GPP
+
+# Set a variable which will control whether or not CORBA is used (and
+# eventually, whether or not CORBA libraries are compiled).  This
+# variable is assumed to have been exported to the environment.  But
+# it may in fact not be defined at all, so any code which uses it
+# should check its value, and not just whether or not it is defined.
+
+CCFLAGS += $(SPECIFIC_FLAGS)
+MEXFLAGS = $(SPECIFIC_FLAGS)
+
+# Flag for position independent code
+
+CCFLAGS += -fPIC
+
+# And see if debugging was requested
+
+ifeq ($(COMPILE_WITH_DEBUG),1)	
+  CCFLAGS += -g
+  CFLAGS  += -g
+else
+  CCFLAGS += -O3
+endif
+
+#CCFLAGS += -fpermissive -Wno-div-by-zero
+
+CC = g++
+
+CCFLAGS  += $(BITFLAG)
+CFLAGS   += $(BITFLAG)
+#MEXFLAGS += $(BITFLAG)
+
+export CCFLAGS
+export CFLAGS
+export MEXFLAGS
+
+#-----------------------------------------------------------------------
+# Libs needed for building binaries
+#-----------------------------------------------------------------------
+
+LIBDIRS = 
+SYSLIBS = 
+
+# Libs specific to climax code
+
+LIBDIRS    += $(LIBDIR)/lib$(PROJ_PREFIX)Util$(LIBSO_SUFFIX)
+LIBDIRS    += $(LIBDIR)/lib$(PROJ_PREFIX)FftUtil$(LIBSO_SUFFIX)
+LIBDIRS    += $(LIBDIR)/lib$(PROJ_PREFIX)PgUtil$(LIBSO_SUFFIX)
+LIBDIRS    += $(LIBDIR)/lib$(PROJ_PREFIX)Slalib$(LIBSO_SUFFIX)
+LIBDIRS    += $(LIBDIR)/lib$(PROJ_PREFIX)Datasets$(LIBSO_SUFFIX)
+LIBDIRS    += $(LIBDIR)/lib$(PROJ_PREFIX)Models$(LIBSO_SUFFIX)
+
+# External tools needed by climax code
+
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libfftw3$(LIBSO_SUFFIX)
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libcfitsio$(LIBSO_SUFFIX)
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libmir$(LIBSO_SUFFIX)
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libgsl$(LIBSO_SUFFIX)
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libgslcblas$(LIBSO_SUFFIX)
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libcpgplot$(LIBSO_SUFFIX)
+LIBDIRS    += $(CLIMAX_TOOLS)/lib/libpgplot$(LIBSO_SUFFIX)
+LIBDIRS    += $(X11LD)
+LIBDIRS    += $(GFORTRANLIB)
+
+#LIBDIRS    += $(CLIMAX_TOOLS)/lib/libexif.12$(LIBSO_SUFFIX)
+
+# System libs needed by climax code
+
+SYSLIBS    += -ldl
+SYSLIBS    += -lreadline
+SYSLIBS    += -ltermcap
+SYSLIBS    += -lcurl
+
+ifeq ($(HAVE_RT), 1)
+  SYSLIBS += -lrt
+endif
+
+# SunOS requires different libraries that linux doesn't need
+
+ifeq ($(OS), SunOS)
+  SYSLIBS        += -lsocket
+endif
+
+PROGLIB    = $(LIBDIR)/lib$(PROJ_PREFIX)Program$(LIBSO_SUFFIX)
+
+NOPROGLIBS = $(LIBDIRS) $(SYSLIBS)
+LIBS       = $(NOPROGLIBS) $(PROGLIB) 
+
+export LIBDIRS
+export SYSLIBS
+export PROGLIB
+export NOPROGLIBS
+export LIBS
+
+export EMLLIBS
+
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Util$(LIBSO_SUFFIX)
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Slalib$(LIBSO_SUFFIX)
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Matlab$(LIBSO_SUFFIX)
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)FftUtil$(LIBSO_SUFFIX)
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Datasets$(LIBSO_SUFFIX)
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Models$(LIBSO_SUFFIX)
+MATLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)PgUtil$(LIBSO_SUFFIX)
+
+MATLIBS += $(CLIMAX_TOOLS)/lib/libmir$(LIBSO_SUFFIX)
+MATLIBS += $(CLIMAX_TOOLS)/lib/libcfitsio$(LIBSO_SUFFIX)
+MATLIBS += $(CLIMAX_TOOLS)/lib/libSfd$(LIBSO_SUFFIX)
+MATLIBS += $(CLIMAX_TOOLS)/lib/libgsl$(LIBSO_SUFFIX)
+MATLIBS += $(CLIMAX_TOOLS)/lib/libgslcblas$(LIBSO_SUFFIX)
+MATLIBS += $(CLIMAX_TOOLS)/lib/libfftw3$(LIBSO_SUFFIX)
+
+MATLIBS += -lreadline
+MATLIBS += -ltermcap
+MATLIBS += -lcurl
+
+MATLIBS += $(CLIMAX_TOOLS)/lib/libcpgplot$(LIBSO_SUFFIX)
+MATLIBS += $(CLIMAX_TOOLS)/lib/libpgplot$(LIBSO_SUFFIX)
+MATLIBS += $(MATX11LD)
+MATLIBS += $(GFORTRANLIB)
+
+export MATLIBS
+
+PYLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Util$(LIBSO_SUFFIX)
+PYLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)FftUtil$(LIBSO_SUFFIX)
+PYLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)PgUtil$(LIBSO_SUFFIX)
+PYLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Slalib$(LIBSO_SUFFIX)
+PYLIBS += $(LIBDIR)/lib$(PROJ_PREFIX)Python$(LIBSO_SUFFIX)
+
+PYLIBS += $(CLIMAX_TOOLS)/lib/libmir$(LIBSO_SUFFIX)
+PYLIBS += $(CLIMAX_TOOLS)/lib/libcfitsio$(LIBSO_SUFFIX)
+PYLIBS += $(CLIMAX_TOOLS)/lib/libSfd$(LIBSO_SUFFIX)
+
+PYLIBS += -lreadline
+PYLIBS += -ltermcap
+PYLIBS += -lcurl
+PYLIBS += -lrt
+PYLIBS += $(PGLD) $(X11LD)
+PYLIBS += $(GFORTRANLIB)
+
+PYLIBS = $(LIBDIRS) $(SYSLIBS) $(LIBDIR)/lib$(PROJ_PREFIX)Python$(LIBSO_SUFFIX)
+
+export PYLIBS
+
+# If preprocessor directives have changed, we may have to re-link
+# binaries
+
+BINDEPEND = $(TOP)/util/Directives.h
+
+export BINDEPEND

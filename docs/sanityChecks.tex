@@ -1,0 +1,60 @@
+\subsubsection{Some sanity checks}
+
+Let's take an example, to see what we get for a typical case.  We can write the beta-model as a radially symmetric pressure model:
+
+\begin{equation}
+p(x) = {1\over{(1 + x^2)^{3\beta/2}}}
+\end{equation}
+
+In the particular case $\beta = 2/3$, the integrals become analytic.  In particular, we have
+
+\begin{equation}
+\integral{}{}{p(x)}{x} = \integral{}{}{{1\over{(1 + x^2)}}}{x} = \arctan{x}
+\end{equation}
+
+and 
+
+\begin{equation}
+\integral{}{}{p(x)x^2}{x} = \integral{}{}{{x^2\over{(1 + x^2)}}}{x} = {x - \arctan{x}}
+\end{equation}
+
+whence
+
+\begin{equation}
+I(0) = \integral{\infty}{-\infty}{p(x)}{x} = \integral{\infty}{-\infty}{{1\over{(1 + x^2)}}}{x} = \pi
+\end{equation}
+
+(which I confirmed numerically)
+
+and 
+
+\begin{equation}
+\integral{x_R}{0}{p(x)4\pi x^2}{x} = 4\pi\integral{x_R}{0}{{x^2\over{(1 + x^2)}}}{x} = 4\pi ({x_R - \arctan{x_R}})
+\end{equation}
+
+(which I also confirm numerically, for $x_R = 1$).
+
+From Equation~\ref{eq:mgas} then, we have:
+
+\begin{eqnarray}
+\Mgas(R) &=& m_p\mu_e {{y(0)}\over{I(0)}} \left({{m_e c^2}\over{k_B T_e(0)}}\right)\left({{D^2_A\theta^2_c}\over{\sigma_T}}\right)\integral{x_R}{0}{p(x)4\pi x^2}{x}\\\nonumber
+     &=& y(0)\left({{T_e}\over{1~{\rm keV}}}\right)^{-1} \left({{D_A}\over{1~{\rm Gpc}}}\right)^2 \left({{\theta_c}\over{1~{\rm arcsec}}}\right)^2 ({x_R - \arctan{x_R}})\\\nonumber
+&& \times 6.8\times 10^{14}\Msolar
+\end{eqnarray}
+
+A \betamodel\ fit to A1914 with $\beta = 2/3$ gives $\theta_c = 20$ arcsec and $\Delta T(0) = -2$~mK, or $y(0) \sim 3.7\times 10^{-4}$.  
+
+For A1914 we also have $T_e \sim 10~{\rm keV}$, $D_A \sim 0.6~$Gpc,
+yielding
+
+\begin{eqnarray}
+\Mgas(R) &=& y(0) ({x_R - \arctan{x_R}}) \times 9.8\times 10^{15}\Msolar
+\end{eqnarray}
+
+In Tony's paper, he estimates an \mathR500\ of $R \sim 1.3$~Mpc, or $x_R = R/(D_A\theta_c) \sim 22$, yielding
+
+\begin{eqnarray}
+\Mgas(R) &=& 7.7\times 10^{13}\Msolar.
+\end{eqnarray}
+
+Note that this is not what Tony reports for A1914, but is within 30\% of his value ($11\times 10^{13}\Msolar$).

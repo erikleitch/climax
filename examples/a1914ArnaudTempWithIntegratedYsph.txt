@@ -1,0 +1,63 @@
+//============================================================
+// An example of fitting the temperature-normalized A10 model to
+// short-baseline SZA data
+//============================================================
+
+//------------------------------------------------------------
+// Add the data set
+//------------------------------------------------------------
+
+adddataset name=duvf type=uvf;
+duvf.file = ~eml/projects/climax/climaxTestSuite/A1914.uvf;
+duvf.uvmin = 0;
+duvf.uvmax = 2000;
+
+//------------------------------------------------------------
+// Add the A10 model
+//------------------------------------------------------------
+
+addmodel name=m_cluster type=arnaudmodel;
+
+//------------------------------------------------------------
+// Assign priors and/or values to Arnaud model parameters
+//------------------------------------------------------------
+
+m_cluster.thetaCore = 5:295";
+m_cluster.spectralType = sz;
+m_cluster.normalizationFrequency = 30 GHz;
+
+m_cluster.Sradio = -5:0 mK;
+m_cluster.xoff   = -60:60";
+m_cluster.yoff   = -60:60";
+
+//------------------------------------------------------------
+// Tell Climax to derive the spherically-integrated Compton Y
+// parameter
+//------------------------------------------------------------
+
+m_cluster.Ysph[derive] = true;
+
+m_cluster.innerRadius = 0.1 Mpc;
+m_cluster.outerRadius = 2.0 Mpc;
+
+//------------------------------------------------------------
+// To calculate Ysph, we require dA, which means that the cosmology
+// must be specified.
+//------------------------------------------------------------
+
+addmodel name=cosmo type=cosmo;
+
+cosmo.z      = 0.168;
+cosmo.H0     = 70 km/s/Mpc;
+cosmo.omegaM = 0.3;
+cosmo.omegaL = 0.7;
+
+//------------------------------------------------------------
+// Directives controlling the run itself
+//------------------------------------------------------------
+
+ntry  = 10000;
+nburn = 3000;
+nbin  = 50;
+
+dev = 1/xs;

@@ -1,0 +1,66 @@
+\def\fac{{\left(k^*/k\right)^\alpha}}
+
+\subsection{Convergence}
+
+Following \cite{Dunkley2008}, we model the power spectrum of each variate as:
+
+\begin{equation}
+P(k) = P_0 {{\fac\over{\fac + 1}}}
+\end{equation}
+
+$P_0$ is an estimate of the sample variance, and $k^*$ is the
+wavenumber where the power spectrum turns over to white noise.
+
+{\bf Implementation Notes}
+
+We fit the power spectrum to this function, for which we require the
+derivatives w.r.t. $P_0$, $k^*$ and $\alpha$.  Letting
+
+\begin{equation}
+f = \fac,
+\end{equation}
+
+we have:
+
+\begin{eqnarray}\nonumber
+{df}\over{dk^*} &=& f\,{{\alpha}\over{k^*}}\\\nonumber
+{df}\over{d\alpha} &=& f\,\ln{(k^*/k)}
+\end{eqnarray}
+
+and 
+
+\begin{eqnarray}\nonumber
+{{dP}\over{dP_0}} &=& {{f}\over{f+1}}\\\nonumber
+{{dP}\over{dk^*}} = {{dP}\over{df}}{{df}\over{dk^*}} &=& {{f}\over{f+1}}\times P_0\left[1 - {{f}\over{f+1}}\right]{{\alpha}\over{k^*}}\\\nonumber
+{{dP}\over{d\alpha}} = {{dP}\over{df}}{{df}\over{d\alpha}} &=& {{f}\over{f+1}}\times P_0\left[1 - {{f}\over{f+1}}\right]{\ln{(k^*/k)}}
+\end{eqnarray}
+
+Note that the convergence test relies on using the power spectrum of
+the chain $\tilde{P}(k)$ to estimate the true sample variance $P_0$.
+Thus the power spectrum should be normalized so that $P(k=0)$ is an
+estimate of the sample variance.  For real transforms in FFTW, the
+discrete Fourier transform is unnormalized, or
+
+\begin{equation}
+Y_k = \sum^{N-1}_{j=0}{X_j e^{-2\pi jk\sqrt{-1}/N}}
+\end{equation}
+
+For $k=0$, we see that 
+
+\begin{equation}
+Y_0 = \sum^{N-1}_{j=0}{X_j},
+\end{equation}
+
+and
+
+\begin{eqnarray}
+Y^2_0 &=& \left(\sum^{N-1}_{j=0}{X_j}\right)^2\\
+ &=& \sum_j{X^2_j} + \sum_i\sum_{j\neq i}{X_iX_j}\\
+ &=& N \left<X^2\right> + 0,
+\end{eqnarray}
+
+assuming the $X_i$ and $X_j$ are uncorrelated.  Therefore, in order
+for the power spectrum to reflect the variance, we instead compute the
+power spectrum of the normalized samples $X_j^\prime = X_j/\sqrt{N}$.
+
+Once $P_0$

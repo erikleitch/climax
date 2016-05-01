@@ -1,0 +1,140 @@
+#include "gcp/fftutil/ImageAxis.h"
+
+using namespace std;
+
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+ImageAxis::ImageAxis() 
+{
+  n_               = 0;
+  nIsSpecified_    = false;
+  sizeIsSpecified_ = false;
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+ImageAxis::~ImageAxis() {}
+
+
+/**.......................................................................
+ * Set the type of this axis
+ */
+void ImageAxis::setAxisType(unsigned type)
+{
+  type_ = type;
+}
+
+//-----------------------------------------------------------------------
+// Npix methods
+//-----------------------------------------------------------------------
+
+void ImageAxis::setNpix(unsigned n)
+{
+  n_            = n;
+  nIsSpecified_ = true;
+}
+
+bool ImageAxis::hasNpix()
+{
+  return nIsSpecified_;
+}
+
+unsigned ImageAxis::getNpix()
+{
+  if(nIsSpecified_) {
+    return n_;
+  } else {
+    ThrowError("Number of pixels isn't specified for this axis: use setNpix()");
+  }
+}
+
+//-----------------------------------------------------------------------
+// Angular size methods
+//-----------------------------------------------------------------------
+
+void ImageAxis::setAngularSize(Angle size)
+{
+  size_            = size;
+  sizeIsSpecified_ = true;
+}
+
+bool ImageAxis::hasAngularSize()
+{
+  return sizeIsSpecified_;
+}
+
+Angle ImageAxis::getAngularSize()
+{
+  if(sizeIsSpecified_) {
+    return size_;
+  } else {
+    ThrowError("No size is specified for this axis: use setAngularSize()");
+  }
+}
+
+/**.......................................................................
+ * Set the spatial frequency resolution of this image
+ */
+void ImageAxis::setSpatialFrequencyResolution(double inverseRadians)
+{
+  Angle size;
+  size.setRadians(1.0/inverseRadians);
+  setAngularSize(size);
+}
+
+/**.......................................................................
+ * Return the angular resolution of this image
+ */
+Angle ImageAxis::getAngularResolution()
+{
+  if(sizeIsSpecified_ && nIsSpecified_) {
+    return size_ / n_;
+  } else {
+    ThrowError("Not enough information to calculate the angular resolution of this axis");
+  }
+}
+
+/**.......................................................................
+ * Return the spatial frequency resolution of this image
+ */
+double ImageAxis::getSpatialFrequencyResolution()
+{
+  return 1.0/getAngularSize().radians();
+}
+
+/**.......................................................................
+ * Return the minimum spatial frequency in this image
+ */
+double ImageAxis::getMinimumSpatialFrequency()
+{
+  return getSpatialFrequencyResolution();
+}
+
+/**.......................................................................
+ * Return the maximum spatial frequency in this image
+ */
+double ImageAxis::getMaximumSpatialFrequency()
+{
+  return getNpix() * 1.0/(2*getAngularSize().radians());
+}
+
+/**.......................................................................
+ * Return true if the axes are equivalent in size and resolution
+ */
+bool ImageAxis::operator==(const ImageAxis& axis)
+{
+  return operator==((ImageAxis&) axis);
+}
+
+bool ImageAxis::operator==(ImageAxis& axis)
+{
+  COUT("Inside baseclass ImageAxis operator");
+  bool sameNpix = getNpix() == axis.getNpix();
+  bool sameSize = fabs((getAngularSize().radians() - axis.getAngularSize().radians()) / getAngularSize().radians()) < 1e-12;
+
+  return sameNpix && sameSize;
+}

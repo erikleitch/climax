@@ -1,0 +1,79 @@
+//============================================================
+// Example of fitting an Arnaud and point source model to
+// SZA data.  
+//
+// In this example, the data are partitioned into short + long
+// baseline datasets: the point-source model is fit to both, but the
+// cluster model is fit only to the short-baseline data.  This results
+// in significantly faster runs, since the image-plane cluster model,
+// which must be transformed to the Fourier plane, can be gridded
+// coarsely, while the point-source model is fit directly in the
+// Fourier plane and requires no Fourier transform.
+// 
+// You can achieve the same fit by loading the data only once, without
+// a uv range, but the run will take much longer (more than an order
+// of magnitude!) since the data will be gridded to the resolution of
+// the long baselines for comparison with both the cluster and point
+// source models.
+//============================================================
+
+//------------------------------------------------------------
+// Read in the dataset, applying a uv cutoff of 2000 (lambda)
+//------------------------------------------------------------
+
+adddataset name=duvf1 type=datasetuvf;
+duvf1.file = ~eml/projects/climax/climaxTestSuite/BMW122_all.uvf;
+duvf1.uvmin = 0;
+duvf1.uvmax = 2000;
+
+//------------------------------------------------------------
+// Read in the same dataset again, applying a uv range of 3000-10000
+// (lambda)
+//------------------------------------------------------------
+
+adddataset name=duvf2 type=datasetuvf;
+duvf2.file = ~eml/projects/climax/climaxTestSuite/BMW122_all.uvf;
+duvf2.uvmin = 3000;
+duvf2.uvmax = 10000;
+
+//------------------------------------------------------------
+// Add an Arnaud model
+//------------------------------------------------------------
+
+addmodel name=cluster type=arnaudmodel;
+
+cluster.thetaCore = 1';
+cluster.rotang    = 0 degrees;
+cluster.spectralType = alpha;
+cluster.spectralIndex = 0.0;
+cluster.normalizationFrequency = 30 GHz;
+cluster.Sradio = -6000:-10 muK;
+cluster.xoff = -2:2';
+cluster.yoff = -2:2';
+
+//------------------------------------------------------------
+// Add a point source model
+//------------------------------------------------------------
+
+addmodel name=ptsrc type=ptsrc;
+ptsrc.xoff = -6:-1';
+ptsrc.yoff = 0:2';
+ptsrc.Sradio = 1:1000 mJy;
+
+//------------------------------------------------------------
+// Exclude the cluster model from the long baseline data
+//------------------------------------------------------------
+
+duvf2.exclude(cluster);
+
+ntry = 10000;
+nburn = 3000;
+nbin = 50;
+
+
+
+
+
+
+
+

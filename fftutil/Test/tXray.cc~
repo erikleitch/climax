@@ -1,0 +1,120 @@
+#include <iostream>
+#include <math.h>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/models/GaussianClusterModel.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Exception.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Dft2d.h"
+#include "gcp/fftutil/Image.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+using namespace gcp::models;
+
+KeyTabEntry Program::keywords[] = {
+  { "dev",      "/xs",            "s", "Pgplot device"},
+  { "file",     "/Users/eml/projects/climax/climaxTestSuite/xray/a1835/image_01236_merged_masked_new.fits", "s", "image to display"},
+  { "bkgd",     "/Users/eml/projects/climax/climaxTestSuite/xray/a1835/image_blank_01236_merged_new.fits",  "s", "background image, if any"},
+  { "expm",     "/Users/eml/projects/climax/climaxTestSuite/xray/a1835/expmap_01236_merged_cm2_new.fits",       "s", "exposure map, if any"},
+  { "outfile",  "",               "s", "FITS file to write out"},
+  { "zeropad",  "f",              "b", "Zeropad the array?"},
+  { "phase",    "0.0",            "d", "Phase (degrees)"},
+  { "period",   "64",             "d", "Period (pixels)"},
+  { "freq",     "30",             "d", "freq (GHz)"},
+  { "amp",      "1",              "d", "amplitude"},
+  { "size",     "1.0",            "s", "size (degrees)"},
+  { "rotang",   "45.0",           "s", "rotation angle (degrees)"},
+  { "minsig",   "2.0",            "d", "min sigma (arcmin)"},
+  { "majsig",   "2.0",            "d", "maj sigma (arcmin)"},
+  { "xoff",     "1.0",            "d", "x offset (arcmin)"},
+  { "yoff",     "1.0",            "d", "y offset (arcmin)"},
+  { "min",      "0.0",            "d", "zmin"},
+  { "max",      "0.0",            "d", "zmax"},
+  { "npix",     "128",            "i", "npix"},
+  { "ihdu",     "0",              "i", "ihdu"},
+
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+
+Image initializeImage(std::string imageFile, std::string bkgdFile, std::string expmFile)
+{
+  Image image, bkgd, expm;
+  image.initializeFromFitsFile(imageFile);
+
+  bkgd = image;
+  bkgd.setValue(0.0);
+
+  String bStr(bkgdFile);
+  if(!bStr.isEmpty())
+    bkgd.initializeFromFitsFile(bkgdFile);
+
+  expm = image;
+  expm.setValue(1.0);
+
+#if 1
+  String eStr(expmFile);
+  if(!eStr.isEmpty()) {
+    expm.initializeFromFitsFile(expmFile);
+    expm.replaceLessThanLimWithVal(1.0, 1.0);
+
+    COUT("Min = " << expm.min() << " max = " << expm.max());
+    expm.display();
+    PgUtil::histogram(expm.data_.size(), &expm.data_[0], 100);
+  }
+#endif
+
+  return (image - bkgd)/expm;
+}
+
+int Program::main()
+{
+  PgUtil::open(Program::getStringParameter("dev"));
+
+  std::string file = Program::getStringParameter("file");
+  std::string bkgd = Program::getStringParameter("bkgd");
+  std::string expm = Program::getStringParameter("expm");
+
+  PgUtil::setZmin(Program::getDoubleParameter("min"));
+  PgUtil::setZmax(Program::getDoubleParameter("max"));
+
+  Image image = initializeImage(file, bkgd, expm);
+
+  Image imageConv = image;
+  Angle sigma;
+  sigma.setArcSec(2);
+  imageConv.createGaussianImage(1.0, sigma);
+
+  //image.initializeFromFitsFile(file, Program::getIntegerParameter("ihdu"));
+  COUT("Here main 2");
+  image.display();
+  imageConv.display();
+  COUT("Here main 3");
+  image.convolve(imageConv);
+  image.logDisplay(true,true);
+
+#if 1
+  Image image2;
+  image2 = image;
+
+  unsigned npix = Program::getIntegerParameter("npix");
+
+  image2.xAxis().setNpix(npix);
+  image2.yAxis().setNpix(npix);
+
+  image2.fillFrom(image, Image::OPER_BIN);
+  image2.display();
+#endif
+
+  return 0;
+}

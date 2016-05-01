@@ -1,0 +1,704 @@
+\section{Datasets}
+
+\subsection{Visibility Datasets}
+\label{sec:vis}
+
+Visibility datasets in UVF format are currently supported (I have a
+stub for miriad file format and the code to read it exists, but it is
+not yet implemented), by using \code{adddataset} with \code{type =
+  uvf}, i.e.:
+
+\begin{myindentpar}{3cm}
+adddataset type=uvf name=duvf;
+\end{myindentpar}
+
+On read-in, visibility data are automatically gridded in Fourier space
+by unique baseline type (for heterogeneous array data) and frequency.
+By default the size of the Fourier grid (effective resolution in image
+space) is chosen for each baseline/frequency combination according to
+the maximum uv radius present in the data.  The resolution in Fourier
+space (effective size in image space) is chosen so that the integrated
+overlap of the autocorrelation functions (what I refer to as the {\it
+  correlation percentage}) for visibility data in each cell is at
+least \code{perc}.  This defaults to $95\%$, or
+$\code{duvf.perc=0.95}$.  The automated gridding will, in general,
+result in different model and primary beam resolution for each
+baseline/frequency pair, and Fourier transforms that are not square,
+leading to the fastest performance for image-plane models that require
+Fourier inversion.
+
+Although dirty images are produced for visibility datasets as if the
+array were homogeneous (i.e., no correction is made for the different
+primary beams), the fitting is handled correctly for heterogeneous
+data as well.  If you want to make beam-corrected images (as for a
+mosaic) of a heterogeneous dataset, use the mosaicked dataset type
+instead (see \S\ref{sec:mosaic} below).
+
+For heterogeneous data, antennas can be included/excluded by type (if
+the type can be determined from the data), or by antenna number.  Thus
+
+\begin{myindentpar}{3cm}
+duvf.useanttypes = sza,bima;
+\end{myindentpar}
+
+would cause \climax\ to use only data from SZA and BIMA antennas in a
+CARMA23 dataset, and
+
+\begin{myindentpar}{3cm}
+duvf.excludeants = 1,4;
+\end{myindentpar}
+
+would use only data matching any specified type, and not including
+antennas 1 or 4.
+
+\subsubsection{Making Images of Visibility Data}
+
+Data can also be gridded to a fixed resolution if desired, though this
+is not recommended for running chains, since there is no guarantee
+that the correlation percentage is uniform, or that the data are
+gridded to the minimum required transform size.  It can however be
+useful for producing images of visibility datasets at fixed
+resolution.  For example, to produce a $128\times128$-pixel image that
+is 0.3 degrees on the sky, you can do:
+
+\begin{myindentpar}{3cm}
+adddataset type=uvf name=duvf;\\
+duvf.size = 0.3 degrees;\\
+duvf.npix = 128;\\
+duvf.display = true;
+\end{myindentpar}
+
+To select a uv range for imaging or fitting in a Markov chain, use the
+\code{uvmin} and \code{uvmax} parameters:
+
+\begin{myindentpar}{3cm}
+duvf.uvmin = 0;\\
+duvf.uvmax = 2000;
+\end{myindentpar}
+
+This would apply a cutoff at $2~k\lambda$ when gridding the visibility
+data.  You can also apply a uvtaper to the data for imaging, but it is
+not recommended for fitting, since it changes the likelihood ratio
+associated with a given $\Delta\chi^2$.  For example:
+
+\begin{myindentpar}{3cm}
+duvf.uvtaper = 0.5, 2000;
+\end{myindentpar}
+
+would apply a gaussian uvtaper whose half-power point lies at
+$2~k\lambda$.  
+
+For all visibility datasets you can have \climax\ output the
+data/model/residual images as FITS files by using the
+\code{dataimage/modelimage/resimage} keywords. 
+
+\subsubsection{Dirty Maps and Pixel Covariance}
+
+When we form a dirty map by Fourier transform of the visibilities, for
+each pixel $j$ we construct the sum:
+
+\begin{eqnarray}\nonumber
+d_j &=& \int\int\widetilde{V}(u,v)e^{2\pi i(ux_j + vy_j)}du\,dv\\\nonumber
+    &=& \int_{\it HP}\left\{\widetilde{V}(u,v)e^{2\pi i(ux_j + vy_j)} + \widetilde{V}(-u,-v)e^{-2\pi i(ux_j + vy_j)}\right\}\\
+    &=& \int_{\it HP}\left\{\widetilde{V}(u,v)e^{2\pi i(ux_j + vy_j)} + \widetilde{V}^*(u,v)e^{-2\pi i(ux_j + vy_j)}\right\}
+\label{eq:dirtyint}
+\end{eqnarray}
+
+where the integral is over the half-plane, and the last step assumes
+that the Fourier transform is Hermitian.  If we rewrite the transform
+as a discrete sum, we have:
+
+\begin{eqnarray}\nonumber
+  d_j &=& \sum_k{\left\{\left(V^R_k + iV^I_k\right)\left\{\cos(a_{jk}) + i\sin(a_{jk})\right\} + \left(V^R_k - iV^I_k\right)\left\{\cos(a_{jk}) - i\sin(a_{jk})\right\}\right\}}\\
+    &=& \sum_k{\left\{V^R_k\cos(a_{jk}) - V^I_k\sin(a_{jk})\right\}}
+\end{eqnarray}
+
+up to a normalization (with $a_{jk} = 2\pi(x_ju_k + y_jv_k)$).  For maps made with ``natural
+weighting'', we form the dirty map from the weighted mean of the
+visibilities
+
+\begin{equation}
+d_j = {{\sum_k{w_kV^R_k}\cos(a_{jk}) - \sum_k{w_kV^I_k}\sin(a_{jk})}\over{\sum_k{w_k}}},
+\label{eq:dirtysig}
+\end{equation}
+
+with $w_k = 1/\sigma^2_k$, i.e., the inverse variance of the Re/Im
+part of the visibility (since that is the estimator that maximizes the
+likelihood of our visibility data).  What is the variance of
+$\{d_j\}$?  It's given by
+
+\begin{eqnarray}\nonumber
+\sigma^2 \equiv\ <d_j^2> &=& {{\sum_k{w^2_k\left<{V^R_k}^2\right>\cos^2(a_{jk})} + \sum_k{w^2_k\left<{V^I_k}^2\right>\sin^2(a_{jk})}\over{\left(\sum_k{w_k}\right)^2}}}\\\nonumber
+&=& {{{\sum_k{w^2_k\sigma^2_k{\cos^2(a_{jk})}}} + \sum_k{w^2_k\sigma^2_k{\sin^2(a_{jk})}}}\over{\left(\sum_k{w_k}\right)^2}}\\
+&=& {{\sum_k{w^2_k\sigma^2_k}}\over{\left(\sum_k{w_k}\right)^2}} = {{\sum_k{w_k}}\over{\left(\sum_k{w_k}\right)^2}} = {{1}\over{\sum_k{w_k}}}
+\label{eq:dirtyvar}
+\end{eqnarray}
+
+\subsubsection{Synthesized beam}
+
+From examination of Eqs.~\ref{eq:dirtyint} and
+Equation~\ref{eq:dirtysig}, it is clear that we can express the
+discrete sampling of the Fourier transform as the multiplication of
+$\widetilde{V}$ with a sampling function $\widetilde{W}$, where
+
+\begin{equation}
+\widetilde{W} = {{\sum_k \delta(u_k, v_k) w_k}\over{\sum_k w_k}}.
+\end{equation}
+
+By the convolution theorem, the inverse transform $W \equiv
+\mathcal{F}^{-1}\{\widetilde{W}\}$ therefore represents the function by which the sky
+signal has been convolved, or effectively the point-spread function of
+the interferometer.  This function is commonly referred to as the {\it
+  synthesized beam}, and can have significant spatial sidelobe
+structure compared to a typical filled-aperture instrument, due to its
+sharp discontinuities in Fourier space.
+
+\subsubsection{Estimating the clean beam width}
+
+We want a gaussian approximation to the synthesized beam.  
+
+A gaussian approximation to any function can be calculated from considering the Taylor expansion of its logarithm:
+
+\begin{equation}
+\ln f(x) \simeq \ln f(x_0) - \left.\pd{\ln f}{x}\right|_{x_0}(x - x_0) + {1\over{2}}\left.\pdd{\ln f}{x}\right|_{x_0}(x - x_0)^2 + \dots
+\end{equation}
+
+Since we are expanding about the maximum, $\left.{\pd{\ln f}{x}}\right|_{x_0} = 0$, and
+
+\begin{equation}
+\ln f(x) \simeq \ln f(x_0) + {1\over{2}}\left.\pdd{\ln f}{x}\right|_{x_0}(x - x_0)^2 + \dots
+\end{equation}
+
+To the extent that we can ignore higher-order terms in the expansion,
+the function will be dominated by the quadratic term, and we can write
+
+\begin{equation}
+f(x) \simeq f(x_0) \exp\left({1\over{2}}\left.\pdd{\ln f}{x}\right|_{x_0}(x - x_0)^2\right)
+\end{equation}
+
+which is just a Gaussian of width
+
+\begin{equation}
+\sigma_x = \left(-\left.\pdd{\ln f}{x}\right|_{x_0}\right)^{-1/2}.
+\label{eq:gapprox}
+\end{equation}
+
+To calculate the gaussian approximation to the synthesized beam, we
+start with the (1D) expression for the synthesized beam:
+
+\begin{equation}
+W(x) = {{\sum_k{w_k}\cos(2\pi x u_k)}\over{\sum_k{w_k}}}
+\end{equation}
+
+whence
+
+\begin{equation}
+\ln W(x) = \ln{\sum_k{w_k}\cos(2\pi x u_k)} + \ln\sum_k{w_k},
+\end{equation}
+
+\begin{equation}
+{\pd{\ln W(x)}{x}} = -{{2\pi\sum_k{w_k u_k\sin(2\pi x u_k)}}\over{\sum_k{w_k\cos(2\pi x u_k)}}}
+\end{equation}
+
+and 
+
+\begin{equation}
+{\pdd{\ln W(x)}{x}} = -{{(2\pi)^2\sum_k{w_k u^2_k\cos(2\pi x u_k)}}\over{\sum_k{w_k\cos(2\pi x u_k)}}} + {{(2\pi)^2\left(\sum_k{w_k u_k\sin(2\pi x u_k)}\right)^2}\over{\left(\sum_k{w_k\cos(2\pi x u_k)}\right)^2}}.
+\end{equation}
+
+When we evaluate this at zero, the $\sin$ terms vanish, and we are left with:
+
+\begin{equation}
+\sigma = {1\over{\sqrt{2\pi^2\left<u^2\right>}}}
+\end{equation}
+
+with
+
+\begin{equation}
+\left<u^2\right> \equiv {{\sum{u^2_k w_k}}\over{\sum{w_k}}}.
+\end{equation}
+
+\subsubsection{Clean images}
+
+Rewriting $\Delta V_k \equiv V^R_k cos(a_{jk}) - V^R_k sin(a_{jk})$,
+we see that if we divide the visibilities into subsets, we have:
+
+\begin{eqnarray}
+d_j &=& {{\sum_{k1}{w_{k1}\Delta V_{k1}} + \sum_{k2}{w_{k2}\Delta V_{k2}}}\over{\sum_{k1}{w_{k1}} + \sum_{k2}{w_{k2}}} }\\
+    &=& {{\sum_{k1} w_{k1}}\over{\sum_k w_k}}{{\sum_{k1}{w_{k1}\Delta V_{k1}}}\over{\sum_{k1}w_{k1}}} 
++ {{\sum_{k2} w_{k2}}\over{\sum_k w_k}}{{\sum_{k2}{w_{k2}\Delta V_{k2}}}\over{\sum_{k2}w_{k2}}}\\
+&=& {{\sum_{i}{w_i d_{\ij}}}\over{\sum_{i}{w_i}}},
+\label{eq:dirtysum}
+\end{eqnarray}
+
+that is, the combined dirty map is the weighted sum of the individual
+dirty maps, with $w_i$ given by the sum of the weights for each subset
+of visibilities.  
+
+What is generally referred to as a {\it clean} image is the equivalent
+sky signal that would be seen by a filled aperture instrument with
+resolution equivalent to the main lobe of the synthesized beam.  We
+can use Eq.~\ref{eq:dirtysum} to construct this image in the same way
+as the dirty image, but with $d_{\ij}$ replaced by the model convolved
+with a Gaussian approximation to the synthesized beam, i.e.:
+
+\begin{equation}
+c_j = {{\sum_{i}{w_i c_{\ij}}}\over{\sum_{i}{w_i}}} + r_j
+\end{equation}
+
+where $c_{\ij} = \{M * \hat{W_i}\}_j$, i.e., the model convolved with the
+$i^{th}$ approximate PSF, and $r_j$ is the residual image, obtained
+from Eq.~\ref{eq:dirtysig} by replacing $\tilde{V}_k$ with the delta
+between the data and model, i.e., $\tilde{V}^m_k - \tilde{V}^d_k$.
+
+Two different types of clean images can be made in \climax: an image
+where the model to be convolved with the synthesized beam is taken
+from the parameter file (or best-fit model from a Markov chain), or an
+image where the model is built up iteratively out of delta functions
+via the {H{\"o}gbom} CLEAN algorithm \citep{1974A&AS...15..417H}.
+
+The type of clean image to produce is controlled by the \code{clean}
+and \code{cleantype} keywords.  If \code{clean = true} then a clean
+image will be generated in place of the default model image.  To
+produce the first type of clean image, use:
+
+\begin{myindentpar}{3cm}
+adddataset type=uvf name=vis;\\
+vis.clean = true;\\
+vis.cleantype = model;\\
+\end{myindentpar}
+
+Note that this will construct an image using an equivalent
+filled-aperture synthesized beam.  As-such, if your model contains
+large-scale power that is not sampled by the actual (i.e., incomplete
+Fourier sampling) instrument, then your clean image will also contain
+large-scale power that is not present in the dirty maps.  
+
+An alternative is the H{\"o}gbom algorithm, which iteratively
+  constructs a model from the dirty maps using only delta-function
+  components; i.e., it is a filled-aperture model approximation to the
+  structure seen in the dirty maps using only components that the
+  actual instrument has sensitivity to.  This can be requested by
+  specifying \code{cleantype = delta} instead.
+
+The H{\"o}gbom algorithm works by iteratively finding the highest
+peaks in the dirty map, at each step in the iteration subtracting a
+copy of the synthesized beam, whose amplitude is a fraction of the
+flux at that location.  The iteration proceeds until a specific cutoff
+flux is reached, or the maximum number of iterations is reached if no
+cutoff is specified.
+
+The number of iterations is controlled by the \code{cleaniter}
+keyword.  The fraction of the synthesized beam to subtract at each
+step is specified by the \code{cleangain} keyword.  A cutoff threshold
+(in Jy) can be specified using the \code{cleancutoff} keyword.  
+
+Additionally, the user must specify windows that the clean algorithm
+will search.  You can specify clean windows in a couple different ways:
+
+\begin{myindentpar}{3cm}
+cleanwindow = [abs +- 0.01, abs +- 0.01, deg];
+\end{myindentpar}
+
+sets up a clean window of $\pm 0.1$~deg around the position of the
+absolute maximum.  You can also use \code{max} or \code{min} instead
+of \code{abs}.  Similarly
+
+\begin{myindentpar}{3cm}
+cleanwindow = [-2:2, -2:2, '];
+\end{myindentpar}
+
+sets up an arbitrary rectangle window.  Lastly, you can use:
+
+\begin{myindentpar}{3cm}
+cleanwindow += [-2:2, -2:2, '];
+\end{myindentpar}
+
+to set up more than one window.
+
+\subsection{Writing Visibility Datasets}
+\label{sec:viswrite}
+
+Data, model or residual visibilities can be written out using the
+\code{datauvf}, \code{modeluvf} or \code{resuvf} keywords, in
+combination with the \code{writedata} directive.  Note that the
+dataset's \code{store} keyword must be set to true to use this
+function.
+
+For unstacked visibility data, all data (including flagged or
+unselected visibilities) are written, with weights as in the original
+file.
+
+For stacked data, only unflagged data matching your current selection
+criteria (selected IFs, antennas or UV range) will be written out,
+with any requested weight scaling applied to the data.
+
+\subsection{Stacking Visibility Datasets}
+\label{sec:stack}
+
+For each dataset, we construct the weighted mean of each visibility according to:
+
+\begin{equation}
+\hat{V}_k = {{\sum{V_j w_{\jk}}\over{\sum{w_{\jk}}}}}
+\end{equation}
+
+When combining datasets for which estimators $\hat{V}_k$ have already
+been formed, we ultimately want:
+
+\begin{eqnarray}\nonumber
+\hat{V} &=& {{\sum_k\sum_j{V_j w_{\jk}}\over{\sum_k\sum{w_{\jk}}}}}\\\nonumber
+        &=& {{\sum_k\hat{V}_k\sum{w_{\jk}}}\over{\sum_k\sum{w_{\jk}}}}\\\nonumber
+        &=& {{\sum_k\hat{V}_k W_k}\over{\sum_k W_k}}\\\nonumber.
+\end{eqnarray}
+
+In other words, the combined maximum likelihood estimator for $V$ is
+just the weighted mean of the separate estimators $\hat{V}_k$, with
+weights $W_k = \sum{w_{\jk}}$.
+
+From Eq.~\ref{eq:dirtysum}, we see that if we break up the
+visibilities into subsets, the combined dirty map can be written as
+the weighted sum of the dirty maps from each subset.  If the subsets
+of visibilities represent different observations with the same
+pointing, the result is trivially the dirty map you would obtain by
+combining the visibilities and Fourier-transforming.
+
+What if the subsets of visibilities represent offset pointings?  By
+shifting each subset of visibilities to a common center, we can
+construct a dirty map that has the correct center, but the primary
+beam envelope for each subset will now be shifted with respect to the
+others, i.e.
+
+\begin{equation}
+d_j = {{\sum_{i}{w_i d_{\ij}}}\over{\sum_{i}{w_i}}},
+\end{equation}
+
+but 
+
+\begin{equation}
+d_{\ij} = b_{\ij} s_j + n_{\ij}, 
+\end{equation}
+
+where 
+
+\begin{equation}
+b_{\ij} = b(x_j + \Delta x_i, y_j + \Delta y_i).
+\end{equation}
+
+Thus the dirty image is the sky signal multiplied by an effective primary beam $\bar{b}_j$, where
+
+\begin{equation}
+\bar{b}_j = {{\sum_i{w_i\,b(x_j + \Delta x_i, y_j + \Delta y_i)}}\over{\sum_i{w_i}}}.
+\end{equation}
+
+\subsection{Mosaicked Visibility Datasets}
+\label{sec:mosaic}
+
+Mosaicked visibility datasets can also be handled in \climax, by using the
+by using \code{adddataset} with \code{type = mos}, i.e.:
+
+\begin{myindentpar}{3cm}
+adddataset type=mos name=dmos;
+\end{myindentpar}
+
+Once defined, datasets can be added to the mosaic using the \code{file} keyword:
+
+\begin{myindentpar}{3cm}
+\begin{verbatim}
+dmos.file  = MS0735_p1.uvf;
+dmos.file += MS0735_p2.uvf;
+\end{verbatim}
+\end{myindentpar}
+
+The mosaic dataset supports the same set of keywords as the \code{uvf}
+visibility dataset (e.g., \code{wtscale, uvmin, uvmax}) plus some
+additional ones, primarily for mapmaking.
+
+Use the keyword \code{power} to specify the point of the primary beam
+beyond which images for each antenna pair/frequency combination will
+be masked before coadding to make the final mosaicked map.
+
+Use the keyword \code{wtmin} to set the minimum weight in the combined
+map.  The final image will be truncated at the boundary beyond
+which the weight is below this limit.
+
+These keywords have no effect on fitting of mosaicked data in \climax.
+
+Note that when using the mosaicked dataset, you will in general need
+to specify absolute coordinates (RA/DEC) for any models, so that the
+relative separations from the RA/DEC of component datasets are
+correctly accounted for.
+
+\subsubsection{Mosaicking Theory}
+
+The ``dirty image'' from an interferometer is enveloped by the primary
+beam of the antennas.  As such, if $d_\ij$ represents the intensity
+in pixel $j$ of map $i$, we have
+
+\begin{equation}
+d_{\ij} = b_{\ij}s_j + n_{\ij},
+\label{eq:mosmap}
+\end{equation}
+
+that is, the pixel consists of the sky signal $s_j$, multiplied by the
+$i$th beam at location $j$, $b_{\ij}$, plus some additive noise.  We
+wish to form the weighted mean of the true sky signal at each pixel,
+or:
+
+\begin{equation}
+\hat{s}_{\ij} = d_{\ij}/b_{\ij}, 
+\end{equation}
+
+with variance
+
+\begin{equation}
+\sigma^2_{\hat{s}_{\ij}} = \sigma^2_i/b^2_{\ij},
+\end{equation}
+
+where $\sigma^2_i$ is given by Eq.~\ref{eq:dirtyvar}.  Thus the $j$th
+pixel in the mosaicked map is given by:
+
+\begin{eqnarray}
+\hat{s}_j &=& {{\sum_i{\hat{s}_{\ij}/\sigma^2_{\hat{s}_{\ij}}}}\over{\sum_i{1/\sigma^2_{\hat{s}_{\ij}}}}}\\
+          &=& {{\sum_i{b_{\ij}d_{\ij}/\sigma^2_i}}\over{\sum_i{b^2_{\ij}/\sigma^2_{i}}}}.
+\label{eq:signal}
+\end{eqnarray}
+
+The uncertainty on the weighted mean sky signal in each pixel is given
+by the variance of Eq.~\ref{eq:signal}:
+
+\begin{equation}
+V\left[{{\sum_i{b_{\ij}d_{\ij}/\sigma^2_i}}\over{\sum_i{b^2_{\ij}/\sigma^2_i}}}\right] = 
+{{\sum_i{V\left[b_{\ij}d_{\ij}/\sigma^2_i\right]}}\over{\left(\sum_i{b^2_{\ij}/\sigma^2_i}\right)^2}} =  
+{{\sum_i{V[b_{\ij}d_{\ij}]/\sigma^4_i}}\over{\left(\sum_i{b^2_{\ij}/\sigma^2_i}\right)^2}} =  
+{{\sum_i{b^2_{\ij}/\sigma^2_i}}\over{\left(\sum_i{b^2_{\ij}/\sigma^2_i}\right)^2}} =  
+{{1}\over{\sum_i{b^2_{\ij}/\sigma^2_i}}},
+\end{equation}
+
+or 
+
+\begin{equation}
+\sigma^2_{\hat{s}_j} = {{1}\over{\sum_i{b^2_{\ij}/\sigma^2_i}}},
+\label{eq:noise}
+\end{equation}
+
+with \snr\ given by:
+
+\begin{equation}
+{\hat{s}_j}/\sigma_{\hat{s}_j} = {{\sum_i{b_{\ij}d_{\ij}/\sigma^2_i}}\over{\sqrt{\sum_i{b^2_{\ij}/\sigma^2_{i}}}}}.
+\label{eq:snr}
+\end{equation}
+
+As for datasets of type \code{uvf} you can have \climax\ output the
+data/model/residual images as FITS files by using the
+\code{dataimage/modelimage/resimage} keywords (for \code{mos}
+datasets, these will be in units of \snr\ instead of Jy/beam).  For
+mosaicked data, you can additionally output the noise image in
+Jy/beam, ($\sqrt{Eq.~\ref{eq:noise}}$) by using the keyword
+\code{noiseimage}.
+
+\subsubsection{Mosaicked clean images}
+
+Equation~\ref{eq:signal} is the primary-beam corrected analog of
+Equation~\ref{eq:dirtysum}.  We can construct a clean image in the
+same way as before by replacing $d_{\ij}$ with $c_{\ij}$, the model
+convolved with a Gaussian approximation to the synthesized beam.
+
+If the H{\"o}gbom algorithm is used to construct a clean image, the
+keyword \code{cleancutoff} for mosaicked datasets is interpreted as
+\snr.
+
+\subsection{Heterogeneous Visibility Datasets}
+
+As discussed in \S\ref{sec:vis} above, heterogeneous interferometric
+datasets are handled correctly by the default \code{uvf} dataset
+type.  For imaging purposes, however, beam-corrected images of
+heterogeneous datasets can be made by using the mosaicked datasets
+type, \code{mos}, as discussed above.
+
+Note that heterogeneous datasets can be treated in the same way as
+mosaicked datasets, for mapmaking purposes.  In this case the beam
+$b_{\ij}$ of Eq.\ref{eq:mosmap} represents the primary beam of each
+distinct antenna pairing $i$ (and technically, at each individual
+frequency) in the heterogeneous array (for three antenna types there
+are 6), at the same spatial location $j$.
+
+For the heterogeneous array, the beam for each pair consists of the
+cross-product of the aperture fields of the two antenna types.  For
+example, if the current grading across dishes $1$ and $2$ are $J_0$
+Bessel functions (for some parameters $\rho$), then:
+
+\begin{eqnarray}\nonumber
+A_1(\theta) &=& \tilde{\mathcal{F}}(J_0(x, \rho_1))\\\nonumber
+A_2(\theta) &=& \tilde{\mathcal{F}}(J_0(x, \rho_2))
+\end{eqnarray}
+
+where $\tilde{\mathcal{F}}$ denotes inverse Fourier transform, with primary beam given by
+
+\begin{equation}
+B_{12}(\theta) = A_1{A_2}^*,
+\end{equation}
+
+or 
+
+\begin{equation}
+b_{\ij} = A_1(\theta_j){A_2(\theta_j)}^*,
+\end{equation}
+
+\subsection{Image Datasets}
+\label{sec:image}
+
+\subsubsection{Image Handling Basics}
+\label{sec:imagehandling}
+
+{\bf Reading Images}
+
+For all image datasets or models, images can be read in FITS format,
+either as standard FITS 2D images, or as columns from a FITS binary
+table --- \climax\ attempts to detect the format automatically.  If a
+binary table is detected, you will have to specify the binary table
+extension from which the read the data (\code{im.extname}), and the x,
+y and data columns of the table that comprise the image
+((\code{im.xcol}), (\code{im.ycol}), and (\code{im.dcol}).  For
+example:
+
+\begin{myindentpar}{3cm}
+im.extname = EVENTS;\\
+im.xcol = x;\\
+im.ycol = y;\\
+im.dcol = energy;
+\end{myindentpar}
+
+would read an image from columns named \code{x}, \code{y} and
+\code{energy} of the binary table with extension name \code{EVENTS}.
+
+{\bf Sub-image Selection}
+
+For all image datasets (or models), images can be manipulated on
+readin, to extract a particular region, resample an image at a
+different pixelation, smooth or otherwise transform the data.  For
+example the following code:
+
+\begin{myindentpar}{3cm}
+im.region = 0,0 deg +- 0.1 deg;\\
+\end{myindentpar}
+
+would extract a $\pm 0.1$~deg region about the center position.  Note
+that the \code{region} specification is somewhat complex and can take
+many forms.  For example \code{im.region = 0,0 +- 0.1 deg} in the
+example above would extract $\pm 0.1$~deg about {\it pixel} (0,0)
+instead.  Specifying \code{region = 65:192,193:320} would extract an
+subimage from pixel 65 to 192 in x and 193 to 320 in y, etc.  Parsing
+a run file with an invalid region specification (i.e., \code{region =
+  0}) will show valid usages.
+
+{\bf Image Resampling}
+
+Images can also be resampled after extraction, by using the
+\code{npix} keyword.  Setting \code{im.npix = 128} would resample the
+image to $128\times128$ pixels; setting \code{im.npix = 64 x 128}
+would resample to $64\times128$.  To preserve the noise properties of
+the image plane data, resampling is done by simple binning, rather
+than convolution, which would correlate the pixel noise.  As a result,
+for fitting purposes, you should not rebin an image with finer
+resolution than the original, or you will duplicate pixels, and you
+will generate sampling artifacts (i.e., moir\'e patterns) if you
+resample an image by anything other than an integral divisor of the
+original image sampling.
+
+{\bf Image Smoothing}
+
+For image models, images can be smoothed by convolution with a
+gaussian kernel, by using the \code{sigmasmooth} keyword.  For example
+
+\begin{myindentpar}{3cm}
+im.sigmasmooth = 2'';
+\end{myindentpar}
+
+would convolve the extracted (and possibly resampled) image with
+gaussian smoothing kernel of $\sigma = 2$~arcseconds.  Note that
+smoothing by convolution is done via FFT, and the image should be
+sampled to a power of 2, or you will produce unexpected artifacts.
+You should not convolve image datasets, or you will produce correlated
+pixel noise in the image plane.
+
+{\bf Transforms}
+
+Simple transformations can also be applied to images, by using the
+\code{trans} keyword.  Setting \code{im.trans = sqrt} for example,
+would take the square root of an image.  Setting \code{trans} to any
+invalid transform name will show supported transform specifications.
+
+\subsubsection{Generic Image Dataset}
+
+Generic image-plane datasets, including support for point-spread
+functions (PSF) can be defined by using \code{adddataset} with
+\code{type = psfimage}.
+
+Point-spread functions can be defined by using the \code{psf} keyword.  For example:
+
+\begin{myindentpar}{3cm}
+adddataset type=psfimage name=im;\\
+im.file = myfile.fits;\\
+im.psf = gauss;\\
+im.obs.ant.diameter = 10m;\\
+im.obs.freqs = 90 GHz;\\
+im.obs.bws = 1 GHz;
+\end{myindentpar}
+
+would convolve all models with an approximate gaussian PSF
+corresponding to a $10$~m antenna diameter at $90~$GHz.  Note that the
+bandwidth is also required whenever a frequency is specified.  Using
+\code{im.psf = realistic} calculates a more realistic primary beam by
+assuming a uniform current grading across the specified aperture.
+Using \code{psf = none} will compare models to the image data without
+any intermediate convolution (the default if \code{psf} is not
+specified).
+
+Additionally, the \code{psfimage} dataset supports evaluation of
+either Gaussian or Poisson likelihoods.  Poisson likelihood evaluation
+may be more appropriate for data dominated by low-count Poisson
+statistics (e.g., X-ray images).  The type of distribution to use can
+be selected by using the \code{dist} keyword.  The default for
+\code{psfimage} datasets is \code{dist = gauss}.
+
+For Gaussian evaluation, a background (mean) and noise estimate (rms)
+are required.  For Poisson evaluation, the background count rate is
+required.
+
+These can be specified either manually, via the \code{background} and
+\code{noiserms} keywords, or you can specify a minimum radius for
+estimating these quantities from the image by using the
+\code{thetaMinErr} keyword, or you can specify a region from which to
+estimate them, by using the \code{errRegion} keyword.  
+
+An additional parameter is provided, via the \code{errImage} keyword
+for specifying whether quantities should be estimated from the
+original image or from the extracted (and possibly resampled) image.
+Think carefully about what you are doing here: if you are using
+Poisson evaluation and you are resampling an image, the background
+count rate should be estimated from the resampled image, or the
+estimated background rate will not match the data.  Likewise, the
+noise rms estimated for Gaussian evaluation must match the noise in
+the final resampled image, or your statistics will not make sense.
+
+Note that for Gaussian evaluation, the estimated background will be
+subtracted from the image.
+
+\subsubsection{Xray Image Dataset}
+
+\climax\ also provides a specialization of the PSF dataset type for
+x-ray image data, by using \code{adddataset} with \code{type = xrayimage}.
+The extension is currently useful for fitting of cluster models, where
+the shape of the cluster profile is inherently different for X-ray and
+SZ observations.
+
+Additionally, the \code{xrayimage} dataset defaults to Poisson
+likelihood evaluation.
+
+\subsubsection{Radio Image Dataset}
+
+\climax\ also provides a specialization of the PSF dataset type for
+radio image data, by using \code{adddataset} with \code{type = radioimage}.
+The extension is currently useful for fitting of cluster models, where
+the shape of the cluster profile is inherently different for X-ray and
+SZ observations.

@@ -1,0 +1,19 @@
+\subsubsection{Beta Model (\betamodel)}
+
+The \betamodel\ is an analytic shape function widely used in X-ray
+analysis to fit the radial density profile:
+
+\begin{equation}
+n_e(x) = {{n_e}_0\over{\left[1 + x^2\right]^{(3\beta/2)}}}
+\end{equation}
+
+The line-integral of this function is therefore commonly used to fit the
+projected 2D cluster profiles in SZ observations:
+
+\begin{equation}
+p(x) = {1\over{\left[1 + x^2\right]^{(1-3\beta/2)}}}
+\end{equation}
+
+The \betamodel\ can bs used in \climax\ by invoking \code{addmodel}
+with \code{type = betamodel}.
+

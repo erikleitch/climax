@@ -1,0 +1,145 @@
+%% This taken directly from emulateapj.sty.
+
+%%%%% include atbeginend.sty by AV:
+
+% Replace plain \begin and \end with\BeginEnvironment and \EndEnvironment
+\let\BeginEnvironment=\begin
+\let\EndEnvironment=\end
+%% \ifundefined from TeXbook
+\def\IfUnDef#1{\expandafter\ifx\csname#1\endcsname\relax}
+% Null command needed to for \nothing{something}=.nothing.
+\def\NullCom#1{}
+\def\begin#1{%
+% if defined \BeforeBeg for this environment, execute it
+\IfUnDef{BeforeBeg#1}\else\csname BeforeBeg#1\endcsname\fi%
+\IfUnDef{AfterBeg#1}% This is done to skip the command for environments
+		     % which can take arguments, like multicols; YOU MUST NOT
+		     % USE \AfterBegin{...}{...} for such environments!
+	\let\SaveBegEnd=\BeginEnvironment%
+\else
+	% Start this environment
+		\BeginEnvironment{#1}%
+	% and execute code after \begin{environment}
+		\csname AfterBeg#1\endcsname
+	\let\SaveBegEnd=\NullCom
+\fi
+\SaveBegEnd{#1}
+}
+\def\end#1{%
+% execute code before \end{environment}
+\IfUnDef{BeforeEnd#1}\else\csname BeforeEnd#1\endcsname\fi%
+% close this environment
+\EndEnvironment{#1}
+% and execute code after \begin{environment}
+\IfUnDef{AfterEnd#1}\else\csname AfterEnd#1\endcsname\fi%
+}
+\def\BeforeBegin#1#2{\expandafter\gdef\csname BeforeBeg#1\endcsname {#2}}
+\def\BeforeEnd  #1#2{\expandafter\gdef\csname BeforeEnd#1\endcsname {#2}}
+\def\AfterBegin #1#2{\expandafter\gdef\csname AfterBeg#1\endcsname {#2}}
+\def\AfterEnd   #1#2{\expandafter\gdef\csname AfterEnd#1\endcsname{#2}}
+
+%%%% end of atbeginend.sty
+
+%  ****************************************
+%  *          BIBLIOGRAPHY                *
+%  ****************************************
+
+\renewenvironment{references}[0]{
+    \vspace{3pt plus 3pt}
+%     \hbox to \textwidth{\centerline{\footnotesize REFERENCES}}
+%     \vspace{-5pt}
+    \begin{multicols}{2}[\hbox to \textwidth{\centerline{\footnotesize
+REFERENCES}} \vspace{-5pt}]
+    \parindent=0cm \parskip=0cm
+    \footnotesize \baselineskip=8pt
+    \def\refpar{\par\hangindent=1.2em\hangafter=1}}
+{\end{multicols}}
+
+% redefine thebibliography
+\renewenvironment{thebibliography}[1]{
+	    \vspace{3pt plus 3 pt}					% AV
+	    \begin{multicols}{2}[\hbox 					% AV
+		to \textwidth{\centerline{\footnotesize			% AV
+		REFERENCES}} \vspace{-5pt}]				% AV
+      \list{
+	   \@biblabel{\@arabic\c@enumiv}}%
+           {
+                \@openbib@code
+		\parindent=0pt \parskip=0pt \parsep=0pt % AV
+		\bibindent=0pt			        %
+		\footnotesize \baselineskip=8pt         % AV
+		\itemindent=-1.0em                      %
+		\itemsep=0pt                            %
+		\listparindent=0pt		        %
+		\settowidth\labelwidth{\@biblabel{#1}}  %
+		\labelsep=0pt                           %
+	        \leftmargin=1.0em
+                \advance\leftmargin\labelsep
+                \usecounter{enumiv}%
+                \let\p@enumiv\@empty
+                \renewcommand\theenumiv{\@arabic\c@enumiv}}%
+                \sloppy\clubpenalty4000\widowpenalty4000%
+                \sfcode`\.\@m}
+     {\def\@noitemerr
+       {\@latex@warning{Empty `thebibliography' environment}}%
+      \endlist\end{multicols}}
+
+% %% AV: 
+\def\inmulticols{0}
+\def\inmulticolstest{1}
+\BeforeBegin{multicols}{\def\inmulticols{1}}
+\AfterEnd{multicols}{\def\inmulticols{0}}
+
+\BeforeBegin{references}{\if\inmulticols\inmulticolstest\end{multicols}%
+			\else\vspace{10pt}\fi}
+\BeforeBegin{thebibliography}{\if\inmulticols\inmulticolstest\end{multicols}%
+			\else\vspace{10pt}\fi}
+
+
+%aas \subsection*{\small REFERENCES}
+%aas \list{\null}{\leftmargin 1.2em\labelwidth\z@\labelsep\z@\itemindent -1.2em
+%aas     \usecounter{enumi}}
+%aas     \def\refpar{\relax}
+%aas     \def\newblock{\hskip .11em plus .33em minus .07em}
+%aas     \sloppy\clubpenalty4000\widowpenalty4000
+%aas     \sfcode`\.=1000\relax}
+%aas \def\endthebibliography{\endlist\revtex@pageid}
+
+\def\@biblabel#1{\relax}
+%\def\@cite#1#2{({#1\if@tempswa , #2\fi})}
+\def\@cite#1#2{#1\if@tempswa , #2\fi}
+
+\def\reference{\@ifnextchar\bgroup {\@reference}
+     	{\@latexerr{Missing key on reference command}
+	{Each reference command should have a key corresponding to a markcite somewhere in the text}}}
+\def\@reference#1{\relax\refpar}
+
+\def\markcite{\@ifnextchar\bgroup{\@markcite}
+	{\@latexerr{Missing key on markcite command}
+	{Each markcite command should have a key corresponding to a reference somewhere in the references section}}}
+\def\@markcite#1{\relax}
+
+\def\@citex[#1]#2{\if@filesw\immediate\write\@auxout{\string\citation{#2}}\fi
+  \def\@citea{}\@cite{\@for\@citeb:=#2\do
+    {\@citea\def\@citea{,\penalty\@m\ }\@ifundefined
+       {b@\@citeb}{\@warning
+       {Citation `\@citeb' on page \thepage \space undefined}}%
+{\csname b@\@citeb\endcsname}}}{#1}}
+
+
+%% subtitle header:
+\def\submitted#1{\gdef\@submitted{#1}}
+\def\subtitle{
+  \vspace*{-12mm}
+  \noindent
+  {\scriptsize {\sc \@submitted} \\
+	Preprint typeset using \LaTeX\ style emulateapj}
+}
+\let\slugcomment\submitted   % slugcomment == submitted
+\submitted{Draft version \today}
+
+%% AV: allow figures to take the whole page
+\renewcommand{\topfraction}{1.0}
+\renewcommand{\bottomfraction}{1.0}
+\renewcommand{\textfraction}{0.0}
+

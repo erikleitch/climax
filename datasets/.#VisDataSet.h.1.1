@@ -1,0 +1,461 @@
+// $Id: VisDataSet.h,v 1.1 2011/01/20 19:34:28 eml Exp $
+
+#ifndef GCP_DATASETS_VISDATASET_H
+#define GCP_DATASETS_VISDATASET_H
+
+/**
+ * @file VisDataSet.h
+ * 
+ * Tagged: Wed Jun 16 10:24:00 PDT 2010
+ * 
+ * @version: $Revision: 1.1 $, $Date: 2011/01/20 19:34:28 $
+ * 
+ * @author tcsh: username: Command not found.
+ */
+
+#include "gcp/fftutil/Antenna.h"
+#include "gcp/fftutil/DataSet.h"
+#include "gcp/fftutil/FitsIoHandler.h"
+#include "gcp/fftutil/Image.h"
+#include "gcp/fftutil/ObsInfo.h"
+#include "gcp/fftutil/Stokes.h"
+#include "gcp/fftutil/UvDataGridder.h"
+
+#include "gcp/util/ChisqVariate.h"
+#include "gcp/util/DecAngle.h"
+#include "gcp/util/Declination.h"
+#include "gcp/util/FitsUvfReader.h"
+#include "gcp/util/Frequency.h"
+#include "gcp/util/Geoid.h"
+#include "gcp/util/HourAngle.h"
+#include "gcp/util/Length.h"
+#include "gcp/util/Percent.h"
+
+#include <map>
+#include <vector>
+
+namespace gcp {
+  namespace datasets {
+
+    class VisDataSet : public gcp::util::DataSet {
+    public:
+
+      //=======================================================================
+      // Struct defining an antenna associated with this visibility
+      // data set
+      //=======================================================================
+
+      struct VisAntenna {
+	gcp::util::Antenna* antenna_; // The antenna descriptor for this antenna
+	bool isUnique_;               // True if this is a unique type of antenna
+      };
+
+      //=======================================================================
+      // Struct for defining a single baseline
+      //=======================================================================
+
+      struct VisBaseline {
+	int aipsBaselineIndex_;
+	gcp::util::Antenna* ant1_;
+	gcp::util::Antenna* ant2_;
+
+	// For simulation only
+
+	VisBaseline() {
+	  aipsBaselineIndex_ = -1;
+	  ant1_  = 0;
+	  ant2_  = 0;
+	};
+
+	VisBaseline(unsigned aipsBaselineIndex, gcp::util::Antenna& ant1, gcp::util::Antenna& ant2) {
+	  aipsBaselineIndex_ = aipsBaselineIndex;
+	  ant1_  = &ant1;
+	  ant2_  = &ant2;
+	}
+      };
+
+      //=======================================================================
+      // A struct for encapsulating data from a single baseline, at a
+      // single stokes and frequency, for a single timestamp
+      //=======================================================================
+
+      struct VisData {
+	double u_;
+	double v_;
+	double w_;
+
+	double r_;
+
+	double re_;
+	double im_;
+	double wt_;
+      };
+
+      //=======================================================================
+      // For a given type of baseline at a single Stokes parameter and
+      // frequency, this struct encapsulates all timestamps and
+      // baselines.
+      //=======================================================================
+
+      struct VisFreqData {
+
+	// A container for holding the gridded visibility data
+
+	gcp::util::UvDataGridder griddedData_;
+
+	// A container for holding the transform of the composite
+	// image-plane model
+
+	gcp::util::Dft2d dft_;
+
+	// A primary beam for this frequency and Stokes parameter
+
+	gcp::util::Image primaryBeam_;
+
+	// A composite image-plane model for this frequency and Stokes parameter
+
+	gcp::util::Image compositeModel_;
+
+	// A work array to save object creation and destruction during
+	// construction of the composite model
+
+	gcp::util::Image modelComponent_;
+
+	// The frequency of this data set
+
+	gcp::util::Frequency frequency_;
+
+	// The maximum UV radius of any visibility in this group, in
+	// inverse radians
+
+	double uvrMax_;
+	double uAbsMax_;
+	double vAbsMax_;
+
+	// The number of visibilities in this group
+
+	unsigned nVis_;
+
+	// Temporary variable used by external classes
+
+	unsigned iVis_;
+
+	//------------------------------------------------------------
+	// Simulation only
+	//------------------------------------------------------------
+
+	bool hasImage_;
+	
+	//------------------------------------------------------------
+	// General methods
+	//------------------------------------------------------------
+
+	VisFreqData() {
+	  iVis_     = 0;
+	  nVis_     = 0;
+	  uvrMax_   = 0.0;
+	  uAbsMax_  = 0.0;
+	  vAbsMax_  = 0.0;
+
+	  // Simulation only
+
+	  hasImage_ = false;
+	}
+
+	// Add a model component to this data set
+
+	void addModel(gcp::util::Model& model);
+
+	// Clear all model components
+
+	void clearModel();
+
+	// Resize for a new correlation length
+
+	void resize(double correlationLength);
+
+	// Resize to match an image
+
+	void resize(gcp::util::Image& image);
+
+	// Take a composite image-plane model and transform, prior to
+	// computing chisq
+
+	void transformModel();
+
+	// Compute the chisq
+
+	virtual gcp::util::ChisqVariate computeChisq();
+
+	//------------------------------------------------------------
+	// Simulation only
+	//------------------------------------------------------------
+
+	void addImage(gcp::util::Image& image);
+
+	// Return true if an image has been installed for this
+	// Frequency
+
+	bool hasImage();
+
+	// Take a composite image-plane model, multiply by the primary
+	// beam, and transform
+
+	void transformImage();
+      };
+
+      //=======================================================================
+      // For a given type of baseline at a single Stokes parameter,
+      // this struct encapsulates all frequencies, timestamps and
+      // baselines.
+      //=======================================================================
+
+      struct VisStokesData {
+       
+	// Which Stokes parameter does this data represent?
+       
+	gcp::util::Stokes::Param stokes_;
+       
+	// A vector of data, sorted by Frequency, for this Stokes parameter
+       
+	std::vector<VisFreqData> freqData_;
+
+	double uvrMax_;
+
+	void checkFrequencyIndex(unsigned iFreq);
+
+	VisStokesData() {
+	  uvrMax_ = 0.0;
+	}
+
+	// Simulation only: Return true if an image has been installed
+	// for all frequencies of this Stokes parameter
+
+	bool hasImage();
+      };
+
+      //=======================================================================
+      // For a given type of baseline, this struct encapsulates all
+      // stokes parameters, frequencies, timestamps and baselines.
+      //=======================================================================
+     
+      struct VisBaselineGroup {
+
+	// How many baselines (per timestamp) are represented in this
+	// group?
+
+	unsigned nBaseline_;
+	unsigned iBaseline_;
+
+	// The two types of antennas that comprise this baseline group
+
+	std::pair<gcp::util::Antenna, gcp::util::Antenna> antennaPair_;
+
+	// The vector of Stokes parameters present
+
+	std::vector<VisStokesData> stokesData_;
+
+	double uvrMax_;
+
+	//------------------------------------------------------------
+	// Simulation only
+	//------------------------------------------------------------
+
+	std::vector<VisBaseline> baselines_;
+
+	//------------------------------------------------------------
+	// General mathods
+	//------------------------------------------------------------
+
+	VisBaselineGroup() {
+	  nBaseline_ = 0;
+	  uvrMax_ = 0.0;
+	}
+
+	// Initialize pertinent members of this struct 
+
+	void initialize(unsigned nStokes, std::vector<gcp::util::Frequency>& frequencies);
+	void initialize(unsigned nStokes, unsigned nFrequency, unsigned nVis);
+
+	// Install a primary beam for this group
+
+	void installPrimaryBeam(gcp::util::Image& image, gcp::util::Stokes stokes, unsigned iFreq);
+
+	void checkStokesIndex(unsigned iStokes);
+
+	void addBaseline(unsigned iBase, gcp::util::Antenna& ant1, gcp::util::Antenna& ant2);
+
+	//------------------------------------------------------------
+	// Simulation only
+	//------------------------------------------------------------
+
+	void calculateVisibilities(unsigned& iVisGroup,
+				   gcp::util::Declination& dec, 
+				   gcp::util::HourAngle& ha); 
+      };
+
+      //=======================================================================
+      // Methods of VisDataSet
+      //=======================================================================
+
+      static const double fourierPlaneConvSig_;
+      static const unsigned fourierPlaneNConv_;
+
+      /**
+       * Constructor.
+       */
+      VisDataSet();
+
+      /**
+       * Destructor.
+       */
+      virtual ~VisDataSet();
+
+      // Get the observation info container for this data set
+
+      gcp::util::ObsInfo& obs();
+
+      // Initialize this data set from a file.
+
+      void initializeFromFile(std::string fileName);
+      void countData(std::string fileName);
+
+      // Load data, choosing gridding to achieve the specified correlation %
+
+      void loadData(std::string fileName, double percentCorrelation=1.0);
+
+      // Load data, choosing gridding to match the passed Image
+
+      void loadData(std::string fileName, gcp::util::Image& image);
+
+      void setupForSimulation(bool sim);
+      void storeDataInternallyOnReadin(bool store);
+      void releaseDataAfterReadin(bool release);
+
+      // Compute the chi-squared of this dataset with the composite image-plane model
+
+      virtual gcp::util::ChisqVariate computeChisq();
+
+      // Install frequencies
+
+      void installFrequencies(std::vector<gcp::util::Frequency>& freqs);
+      void installBandwidth(gcp::util::Frequency bw);
+
+      // Compute primary beams
+
+      void computePrimaryBeams();
+
+      // Plot methods
+
+      void plotUv(  int iGroup=-1, int iStokes=-1, int iFreq=-1);
+      void plotReal(int iGroup=-1, int iStokes=-1, int iFreq=-1);
+      void plotImag(int iGroup=-1, int iStokes=-1, int iFreq=-1);
+      void plotAbs( int iGroup=-1, int iStokes=-1, int iFreq=-1);
+      void plotSimVis();
+
+      void addModel(gcp::util::Model& model);
+      void clearModels();
+
+      //------------------------------------------------------------
+      // Methods used for simulation
+      //------------------------------------------------------------
+
+      // Add an image to the image-plane model for this frequency
+
+      void addImage(gcp::util::Image& image, int iFrequency=-1, int iStokes=-1);
+
+      void calculateSimulatedUvw();
+
+      void observe(bool overwrite=false);
+      void transformImages();
+      void calculateVisibilities();
+      void replaceVisibilities();
+      void initializeSimulationVisibilityArray();
+      void fillSimulationVisibilityArray();
+
+      void estimateErrorInMeanFromData(bool estimate);
+
+      void writeUvfFile(std::string fileName);
+
+      gcp::util::ObsInfo& getObs();
+
+    protected:
+
+      // Information about the observation
+
+      gcp::util::ObsInfo obs_;
+
+      // If true, we will estimte the error in the mean of each
+      // gridded Fourier cell from the data themselves
+
+      bool estimateErrInMeanFromData_;
+
+      // If true, data will be stored internally during read-in
+
+      bool storeDataInternally_;
+      bool releaseDataAfterReadin_;
+
+      // The vector of baseline groups encountered in this data set
+
+      std::vector<VisBaselineGroup> baselineGroups_;
+      
+      // Maps used to convert between AIPS-style baseline indices, and
+      // internal baseline group indices
+
+      std::map<unsigned, unsigned> baselineTagToGroupIndexMap_;
+      std::map<unsigned, unsigned> aipsBaselineIndexToGroupIndexMap_;
+      std::map<unsigned, unsigned> aipsBaselineIndexCount_;
+
+      // True if a weight is valid for a visibility
+
+      bool goodWt(double wt);
+
+      void guessAtAntennaType();
+      void printFileStats();
+
+      void determineUniqueBaselineGroupings();
+      void checkAntenna(gcp::util::Antenna& ant, std::vector<gcp::util::Antenna>& uniqueAnts);
+      void checkBaselineGroupIndex(unsigned iGroup);
+
+      void getVis(gcp::util::Dft2d::DataType type,
+		  std::vector<float>& x, std::vector<float>& y, 
+		  int iGroup, int iStokes, int iFreq);
+
+      // Initialize dfts, if gridding the visibility data
+
+      void initializeVisibilityArrays(double percentCorrelation);
+      void initializeVisibilityArrays(gcp::util::Image& image);
+      void purgeZeroSizedGroups();
+
+      // Transform image-plane model for computing chisq
+
+      void transformModels();
+      gcp::util::ChisqVariate accumulateChisq();
+
+      void accumulateMoments(std::string fileName, bool first);
+      void initializeForMomentAccumulation(bool first);
+      void calculateErrorInMean();
+
+      //------------------------------------------------------------
+      // Virtual functions that must be defined by inheritors
+      //------------------------------------------------------------
+
+      virtual void openFileReader(std::string fileName)               = 0;
+      virtual void closeFileReader()                                  = 0;
+      virtual void updateFrequencyInformation()                       = 0;
+      virtual void updateObservationInformation()                     = 0;
+      virtual void updateVisibilityInformation()                      = 0;
+      virtual void getGroup(unsigned iGroup, gcp::util::ObsInfo::Vis& vis)       = 0;
+      virtual void initializeAntennaInformation(std::string fileName) = 0;
+
+      bool haveImages();
+      bool canSimulate();
+
+    }; // End class VisDataSet
+
+  } // End namespace datasets
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_DATASETS_VISDATASET_H

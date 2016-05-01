@@ -1,0 +1,12 @@
+#!/bin/tcsh
+
+# List all processes, grep-ing for a match to the input argument when
+# a match is found, we use awk to extract the process id
+
+# NB: the 'grep -v' lines filter out any process associated with this
+# script, so that we don't kill ourselves
+
+foreach i (`ps -aux | grep "$1" | grep -v killAll | grep -v grep | awk '{print $4}'`)
+echo "killing " $i
+kill -9 $i
+end

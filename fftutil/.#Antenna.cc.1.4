@@ -1,0 +1,456 @@
+#include "gcp/util/Exception.h"
+
+#include "gcp/fftutil/Antenna.h"
+#include "gcp/fftutil/Dft2d.h"
+
+using namespace std;
+
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+Antenna::Antenna() 
+{
+  type_  = ANT_UNKNOWN;
+  idTag_ = 0;
+
+  diameterIsSpecified_           = false;
+  apertureEfficiencyIsSpecified_ = false;
+  locationMask_                  = LOC_NONE;
+
+  enu_.coordSystem_ = COORD_ENU;
+  xyz_.coordSystem_ = COORD_XYZ;
+
+  initializeAntennaDiameterMap();
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+Antenna::~Antenna() {}
+
+Antenna::Antenna(const Antenna& ant)
+{
+  *this = (Antenna&)ant;
+  initializeAntennaDiameterMap();
+}
+
+Antenna::Antenna(Antenna& ant)
+{
+  *this = ant;
+}
+
+void Antenna::operator=(const Antenna& ant)
+{
+  *this = (Antenna&)ant;
+}
+
+void Antenna::operator=(Antenna& ant)
+{
+  diameter_ = ant.diameter_;
+  type_     = ant.type_;
+  diameterIsSpecified_ = ant.diameterIsSpecified_;
+  idTag_ = ant.idTag_;
+}
+
+void Antenna::setType(AntennaType type)
+{
+  type_     = type; // Antenna was specified by type
+  diameter_ = diameterMap_[type];
+  diameterIsSpecified_ = true;
+}
+
+void Antenna::setDiameter(Length diameter)
+{
+  type_ = ANT_DIAM; // Antenna was specified by diameter
+  diameter_ = diameter;
+  diameterIsSpecified_ = true;
+}
+
+Length Antenna::getDiameter()
+{
+  if(!diameterIsSpecified_) {
+    ThrowError("No diameter has been specified for this antenna");
+  }
+
+  return diameter_;
+}
+
+void Antenna::setApertureEfficiency(Percent apEff)
+{
+  apertureEfficiency_ = apEff;
+  apertureEfficiencyIsSpecified_ = true;
+}
+
+Percent Antenna::getApertureEfficiency()
+{
+  if(!apertureEfficiencyIsSpecified_) {
+    ThrowError("No aperture efficiency has been specified for this antenna");
+  }
+
+  return apertureEfficiency_;
+}
+
+/**.......................................................................
+ * Initialize the map of known antenna diameters
+ */
+void Antenna::initializeAntennaDiameterMap()
+{
+  diameterMap_[ANT_AMI]           = Length(Length::Meters(),       4.00);
+  diameterMap_[ANT_BIMA]          = Length(Length::Feet(),        20.00);
+  diameterMap_[ANT_CBI]           = Length(Length::Meters(),       1.00);
+  diameterMap_[ANT_DASI]          = Length(Length::Centimeters(), 25.00);
+  diameterMap_[ANT_SZA]           = Length(Length::Meters(),       3.50);
+  diameterMap_[ANT_OVRO]          = Length(Length::Meters(),      10.40);
+  diameterMap_[ANT_VLA]           = Length(Length::Meters(),      25.00);
+
+  secondaryDiameterMap_[ANT_BIMA] = Length(Length::Feet(),         2.00);
+  secondaryDiameterMap_[ANT_OVRO] = Length(Length::Feet(),         2.00);
+  secondaryDiameterMap_[ANT_SZA]  = Length(Length::Meters(),       0.35);
+}
+
+std::ostream& gcp::util::operator<<(std::ostream& os, const Antenna& antenna)
+{
+  return operator<<(os, (Antenna&)antenna);
+}
+
+std::ostream& gcp::util::operator<<(std::ostream& os, Antenna& antenna)
+{
+  os << "Type     = "   << antenna.type_     << std::endl
+     << "Diameter = "   << antenna.diameter_ << std::endl
+     << "Diameter was specified = " << antenna.diameterIsSpecified_ << std::endl
+     << "Id Tag   = "   << antenna.idTag_    << std::endl
+     << "ENU Location is: " << std::endl << antenna.enu_ << std::endl
+     << "XYZ Location is: " << std::endl << antenna.xyz_ << std::endl;
+
+  return os;
+}
+
+std::ostream& gcp::util::operator<<(std::ostream& os, Antenna::AntennaType& type)
+{
+  switch (type) {
+  case Antenna::ANT_UNKNOWN:
+    os << "Unknown";
+    break;
+  case Antenna::ANT_AMI:
+    os << "AMI";
+    break;
+  case Antenna::ANT_BIMA:
+    os << "BIMA";
+    break;
+  case Antenna::ANT_CBI:
+    os << "CBI";
+    break;
+  case Antenna::ANT_DASI:
+    os << "DASI";
+    break;
+  case Antenna::ANT_SZA:
+    os << "SZA";
+    break;
+  case Antenna::ANT_OVRO:
+    os << "OVRO";
+    break;
+  case Antenna::ANT_VLA:
+    os << "VLA";
+    break;
+  default:
+    os << "Unknown";
+    break;
+  }
+
+  return os;
+}
+
+/**.......................................................................
+ * Return the Fourier-space correlation length for this antenna
+ */
+double Antenna::getFourierCorrelationLength(Frequency freq, double correlationCoeff)
+{
+  return Dft2d::correlationLength(diameter_, freq, correlationCoeff);
+}
+
+/**.......................................................................
+ * Return the gaussian approximation to the primary beam of this antenna
+ */
+Image Antenna::getGaussianPrimaryBeam(unsigned nPix, Angle size, Frequency freq)
+{
+  Image beam;
+
+  beam.setNpix(nPix);
+  beam.setAngularSize(size);
+
+  beam.createGaussianPrimaryBeam(diameter_, freq);
+
+  return beam;
+}
+
+/**.......................................................................
+ * Return a realistic aperture field for this antenna (power pattern =
+ * primary beam = the square of the aperture field)
+ */
+Image Antenna::getRealisticApertureField(Image& image, Frequency freq)
+{
+  if(type_ == ANT_DIAM) {
+    return getGenericRealisticApertureField(image, freq);
+  } else {
+    return getSpecificRealisticApertureField(image, freq);
+  }
+}
+
+/**.......................................................................
+ * Return a generic aperture field for an antenna of this diameter,
+ * assuming a generic current grading.
+ */
+Image Antenna::getGenericRealisticApertureField(Image& image, Frequency freq)
+{
+  Dft2d dft;
+
+  dft.zeropad(true, 4);
+
+  dft.xAxis().setNpix(image.xAxis().getNpix());
+  dft.yAxis().setNpix(image.yAxis().getNpix());
+
+  dft.xAxis().setAngularSize(image.xAxis().getAngularSize());
+  dft.yAxis().setAngularSize(image.yAxis().getAngularSize());
+
+  Wavelength wave(freq);
+
+  // At this point, I'm considering a J0 Bessel current grading across
+  // the primary, with the 20 dB point of the bessel main lobe at the
+  // edge of the dish, to be 'generic'.
+
+  dft.createJ0BesselFnDft(wave, diameter_, 0.01);
+
+  // Compute the inverse transform to get the far-field voltage
+  // pattern of this dish
+
+  dft.computeInverseTransform();
+  Image apfield = dft.getImage();
+
+  // And return the normalized pattern
+
+  return apfield / apfield.max();
+}
+
+/**.......................................................................
+ * Return the aperture field for an antenna of this diameter, assuming
+ * a current grading specific to this antenna
+ */
+Image Antenna::getSpecificRealisticApertureField(Image& image, Frequency freq)
+{
+  Dft2d dft;
+
+  //  dft.zeropad(true, 8);
+  dft.zeropad(false);
+
+  dft.xAxis().setNpix(image.xAxis().getNpix());
+  dft.yAxis().setNpix(image.yAxis().getNpix());
+
+  dft.xAxis().setAngularSize(image.xAxis().getAngularSize());
+  dft.yAxis().setAngularSize(image.yAxis().getAngularSize());
+
+  Wavelength wave(freq);
+  Length innerDiameter;
+
+  switch(type_) {
+
+    // SZA, OVRO and BIMA antennas are all pretty much the same.  J0
+    // Bessel fn current grading, with the 20 dB point at the edge of
+    // the dish
+
+  case ANT_SZA:
+  case ANT_OVRO:
+  case ANT_BIMA:
+    innerDiameter = secondaryDiameterMap_[type_];
+    dft.createBlockedApertureJ0BesselFnDft(wave, innerDiameter, diameter_, 0.01);
+    break;
+
+    // DASI was an unblocked feed horn
+
+  case ANT_DASI:
+    dft.createUniformDiskDft((diameter_ / wave)/2);
+    break;
+
+    // Others we just assume J0 Bessel current grading with unblocked
+    // apertures, since we don't in this case know the size of the
+    // secondary
+
+  default:
+    dft.createJ0BesselFnDft(wave, diameter_, 0.01);
+    break;
+  }
+
+  // Now get the inverse transform to get the far-field voltage
+  // pattern of this antenna
+
+  dft.computeInverseTransform();
+  Image apfield = dft.getImage();
+
+  // And return the normalized pattern
+
+  return apfield / apfield.max();
+}
+
+/**.......................................................................
+ * Return a gaussian primary beam for this antenna
+ */
+Image Antenna::getGaussianPrimaryBeam(Image& image, Frequency freq)
+{
+  Image beam;
+
+  beam.xAxis().setNpix(image.xAxis().getNpix());
+  beam.xAxis().setAngularSize(image.xAxis().getAngularSize());
+
+  beam.yAxis().setNpix(image.yAxis().getNpix());
+  beam.yAxis().setAngularSize(image.yAxis().getAngularSize());
+  
+  beam.createGaussianPrimaryBeam(diameter_, freq);
+
+  return beam;
+}
+
+/**.......................................................................
+ * Return a more realistic primary beam for this antenna
+ */
+Image Antenna::getRealisticPrimaryBeam(Image& image, Frequency freq)
+{
+  if(type_ == ANT_DIAM) {
+    return getGenericRealisticPrimaryBeam(image, freq);
+  } else {
+    return getSpecificRealisticPrimaryBeam(image, freq);
+  }
+}
+
+/**.......................................................................
+ * Return a generic primary beam for an antenna of this diameter,
+ * assuming a generic uniform aperture field.
+ */
+Image Antenna::getGenericRealisticPrimaryBeam(Image& image, Frequency freq)
+{
+  Image beam = getGenericRealisticApertureField(image, freq);
+
+  // Square it to get the power pattern
+
+  beam *= beam;
+
+  // And return the normalized beam
+
+  return beam / beam.max();
+}
+
+/**.......................................................................
+ * Return a primary beam for an antenna of this diameter, assuming an
+ * aperture field specific to this antenna
+ */
+Image Antenna::getSpecificRealisticPrimaryBeam(Image& image, Frequency freq)
+{
+  Image beam = getSpecificRealisticApertureField(image, freq);
+
+  // Square it to get the power pattern
+
+  beam *= beam;
+
+  // And return the normalized beam
+
+  return beam / beam.max();
+}
+
+void Antenna::setLocation(LengthTriplet location)
+{
+  if(location.coordSystem_ == COORD_ENU) {
+
+    setEast(location.east_);
+    setNorth(location.north_);
+    setUp(location.up_);
+
+  } else if(location.coordSystem_ == COORD_XYZ) {
+
+    setX(location.X_);
+    setY(location.Y_);
+    setZ(location.Z_);
+
+  } else {
+    ThrowError("Unrecognized coordinate system");
+  }
+}
+
+void Antenna::setEast(Length east)
+{
+  enu_.east_ = east;
+  locationMask_ |= LOC_EAST;
+}
+
+void Antenna::setNorth(Length north)
+{
+  enu_.north_ = north;
+  locationMask_ |= LOC_NORTH;
+}
+
+void Antenna::setUp(Length up)
+{
+  enu_.up_ = up;
+  locationMask_ |= LOC_UP;
+}
+
+void Antenna::setX(Length X)
+{
+  xyz_.X_ = X;
+  locationMask_ |= LOC_X;
+}
+
+void Antenna::setY(Length Y)
+{
+  xyz_.Y_ = Y;
+  locationMask_ |= LOC_Y;
+}
+
+void Antenna::setZ(Length Z)
+{
+  xyz_.Z_ = Z;
+  locationMask_ |= LOC_Z;
+}
+
+void Antenna::setLla(Lla geodeticLla)
+{
+  geodeticLla_ = geodeticLla;
+  locationMask_ |= LOC_LLA;
+}
+
+LengthTriplet Antenna::getEnu()
+{
+  Geoid geoid;
+
+  if(locationMask_ &= LOC_ENU_ALL) {
+  } else if((locationMask_ &= LOC_XYZ_ALL) && (locationMask_ &= LOC_LLA)) {
+    enu_ = geoid.geodeticLlaAndXyzToEnu(geodeticLla_, xyz_);
+    locationMask_ |= LOC_ENU_ALL;
+  } else {
+    ThrowError("Not enough information to compute ENU coordinates");
+  }
+
+  return enu_;
+}
+
+LengthTriplet Antenna::getXyz()
+{
+  Geoid geoid;
+
+  if(locationMask_ &= LOC_XYZ_ALL) {
+  } else if((locationMask_ &= LOC_ENU_ALL) && (locationMask_ &= LOC_LLA)) {
+    xyz_ = geoid.geodeticLlaAndEnuToXyz(geodeticLla_, enu_);
+    locationMask_ |= LOC_XYZ_ALL;
+  } else {
+    ThrowError("Not enough information to compute XYZ coordinates");
+  }
+
+  return xyz_;
+}
+
+bool Antenna::hasLocation()
+{
+  COUT("Location mask = " << locationMask_);
+
+  return (locationMask_ & LOC_ENU_ALL)==LOC_ENU_ALL || (locationMask_ & LOC_XYZ_ALL)==LOC_XYZ_ALL;
+}
+

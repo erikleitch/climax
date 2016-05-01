@@ -1,0 +1,174 @@
+#* Makefile - template Makefile for mir.make 
+#& pjt
+#: system operation
+#+
+#	This Makefile is a "template" with which various MIRIAD 
+#	modules can be compiled and tailored. It lives as
+#       Makefile.in in MIR/install and during the configure
+#       stage will be converted to a Makefile.
+#	For some dedicated programs you might want to add a
+#	'program.make' file to your make command; e.g.
+#	
+#	make -f fits.make fits
+#
+#	would compile a special version of fits to include a
+#	local copy of the fitsio.for subroutine package that
+#	would normally have been loaded in from libmir.a
+#	The fits.make file reads as:
+#
+#	BINS = fits
+#
+#	fits:   fitsio.o fits.o
+#       	$(FC) $(FFLAGS) -o fits fitsio.o fits.o $(MIRLIBS)
+#
+#
+#   See also: mir.make
+#
+#   Note:  only support for programs right now...
+#-
+#   Updates:
+#	22-may-91  added rules to .doc files
+#	 1-oct-91  formal documentation added, mir.make written
+#	17-dec-91  changed RFLAGS to include new -g flag
+#	19-dec-91	no -g for rflags
+#	30-jul-92  added template example for special project
+#                  and changed RFLAGS from '-s sun' to '-s f77'
+#	11-mar-93   -s f77 back to -s sun
+#	31-aug-98  linux version
+#	27-jul-99  add linux fix to remake shared library
+#       23-jan-04  MIR4
+#       16-mar-06  hack/fix slib for different architectures, switch to Makefile.in
+#       15-feb-07  add uvio target
+
+# For station identification:
+VERSION = Makefile.linux    15-feb-07
+MESG = Default Makefile for MIRIAD tasks in `pwd`
+
+#       Misc settings
+LFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+
+#	Default Flags for C, Fortran and Ratty compiler
+IFLAGS = -I$(MIRINC) -I$(MIRLIB)
+CFLAGS = -g -DMIR4 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -Wall -fpic
+FFLAGS = -g -DMIR4 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -fpic
+RFLAGS = -b -s f2c -D linux -I $(MIRINC)
+#	Default compilers
+CC = cc
+FC = f77
+MIRLIBS=`mirlibs`
+EL = 
+#	Default library, and make it precious just in case...
+SL = $(LIBDIR)/lib$(PROJ_PREFIX)Miriad$(LIBSO_SUFFIX)
+
+.PRECIOUS: $(L)
+#	Names of library modules 
+OBJS =  $(patsubst %.c,%.o,$(wildcard [a-z]*.c)) 
+#   	Names of program modules
+BINS = 
+
+#   Add a new suffix to the known suffixes
+.SUFFIXES: .for .cdoc
+
+# Miriad rules: the order is important if you don't want to get annoyed by
+# having to delete .f and .o files if the .for file is updated....
+#
+.for.doc:
+	doc -p $*.for
+
+.for.f:
+	ratty $(RFLAGS) $*.for $*.f
+
+.for.o:
+	ratty $(RFLAGS) $*.for $*.f
+	$(FC) $(FFLAGS) -c $*.f
+
+.for:
+	ratty $(RFLAGS) $*.for $*.f
+	$(FC) $(FFLAGS) -c $*.f
+	$(FC) $(FFLAGS) -o $@ $*.o $(MIRLIBS) $(EL)
+
+.f:
+	$(FC) $(FFLAGS) -c $*.f
+	$(FC) $(FFLAGS) -o $@ $*.o $(MIRLIBS) $(EL)
+
+.o:
+	$(FC) $(FFLAGS) -o $@ $*.o $(MIRLIBS) $(EL)
+
+#       this odd rules is merely uvio
+.c:
+	$(CC) -DTESTBED $(IFLAGS) $(CFLAGS) -c $*.c
+	$(FC) $(FFLAGS) -o $@ $*.o $(MIRLIBS) $(EL)
+
+#	Since this is the first target, we'll make it act like
+#	a ``help''. This will prevent a simple 'make' command to
+#	start doing all kinds of unwanted things.
+help:
+	@echo $(VERSION)
+	@echo $(MESG)
+	@echo " "
+	@echo BINS=$(BINS) OBJS=$(OBJS) 
+	@echo PROG=$(PROG) PROGO=$(PROGO) 
+	@echo Targets:
+	@echo " lib         add OBJS to library"
+	@echo " install     move BINS to MIRBIN"
+	@echo " clean       remove .o, .f, .doc etc."
+	@echo " $(PROG)       compile and link $(PROG)"
+
+# either via configure, or manually, but slib needs to point to the correct
+# way to make a shared library out of the static one (or skip making one)
+
+libs:	$(SL)
+
+bins:
+
+$(SL):	$(OBJS)
+	g++ $(LIBSO_FLAGS) -g -fPIC -o $(SL) $(OBJS)
+
+install:  $(BINS)
+	chmod g+w $?
+	-mv $? $(MIRBIN)
+	rm -f *.f *.o $?
+
+install_lib:  $(L)
+
+update:
+	-for i in $(BINS); do \
+	( ln $(MIRBIN)/$$i $$i); done
+	$(MAKE) install BINS=$(BINS)
+
+clean: cleanup
+
+cleanup:
+	rm -f core flint.log *.o *.f *.doc $(BINS) $(PROG)
+	rm -f $(SL)
+
+clean_depend:
+
+all:	$(BINS)
+
+# special hack for uvio
+LFS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE
+uvio:
+	(cd $(MIRSUBS); $(CC) $(CFLAGS) $(LFS) -DTESTBED -I$(MIRINC) -o $(MIRBIN)/uvio uvio.c $(MIRLIB)/libmir.a -lm)
+
+############################################################################
+# special projects and their dependencies follow here
+
+#>> the name of the program (the executable)
+# e.g. 'PROG = prog1'
+PROG = prog1
+
+#>> list all local files (program + subroutines) as .o files
+# e.g. 'PROGO = prog1.o sub1.o sub2.o'
+PROGO = prog1.o sub1.o sub2.o
+
+#>> list which source code depend on headers
+#>> Note these are the intermedite .f files !!!!
+# e.g. 'sub1.f sub2.f: common.h'
+sub1.f sub2.f: common.h 
+
+#>> this will compile/link the program, normally no need to edit this
+$(PROG):    $(PROGO)
+	$(FC) $(FFLAGS) -o $@ $(PROGO) $(MIRLIBS)
+
+############################################################################

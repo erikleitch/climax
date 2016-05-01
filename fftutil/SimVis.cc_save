@@ -1,0 +1,966 @@
+#include "gcp/fftutil/SimVis.h"
+
+#include "gcp/util/Constants.h"
+#include "gcp/util/Planck.h"
+#include "gcp/util/SzCalculator.h"
+
+#include "gcp/util/Exception.h"
+
+#ifdef SIM_DEBUG
+#include "gcp/pgutil/PgUtil.h"
+#endif
+
+using namespace std;
+
+using namespace gcp::util;
+
+const double SimVis::CONV_SIG = 0.594525;
+
+ /**.......................................................................
+ * Constructor.
+ */
+SimVis::SimVis() 
+{
+  frequencies_.resize(0);
+
+  // Initialize these to one.  
+
+  fg_.resize(1);
+  leak_.resize(1);
+  beam_.resize(1);
+
+  includeOffsetLeakage_   = false;
+  treatAsAbsoluteLeakage_ = false;
+
+  defMask_ = DEF_NONE;
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+SimVis::~SimVis() {}
+
+/**.......................................................................
+ * Set up the angular size of the images
+ */
+void SimVis::setImageSize(Angle& size)
+{
+  size_ = size;
+  defMask_ |= DEF_SIZE;
+
+  // Calculate the pixel delta
+
+  if(defMask_ & DEF_NPIX)
+    dx_ = size_ / npix_;
+}
+
+/**.......................................................................
+ * Set up the number of pixels in the image
+ */
+void SimVis::setImageNpix(unsigned npix)
+{
+  npix_ = npix;
+  defMask_ |= DEF_NPIX;
+
+  // Calculate the pixel delta
+
+  if(defMask_ & DEF_SIZE) {
+    dx_ = size_ / npix_;
+  }
+}
+
+/**.......................................................................
+ * Set up the frequencies for which visibilities will be
+ * generated
+ */
+void SimVis::setFrequencies(std::vector<Frequency>& freqs)
+{
+  frequencies_ = freqs;
+  defMask_ |= DEF_FREQ;
+}
+
+/**.......................................................................
+ * Install a CMB image
+ */
+void SimVis::installCmbImage(Image& image, Stokes::Param stokes)
+{
+  checkNpix(image);
+  cmb_.getImage(stokes) = image;
+  cmb_.mask_ |= stokes;
+}
+
+/**.......................................................................
+ * Install a foreground image.  freqIndex must be valid for the
+ * vector of frequencies passed to setFrequencies()
+ */
+void SimVis::installFgImage(Image& image, Stokes::Param stokes, 
+			    unsigned freqIndex)
+{
+  checkNpix(image);
+  checkFrequency(freqIndex);
+
+  if(fg_.size() < frequencies_.size())
+    fg_.resize(frequencies_.size());
+  
+  fg_[freqIndex].getImage(stokes) = image;
+  fg_[freqIndex].mask_ |= stokes;
+}
+
+/**.......................................................................
+ * Install a leakage mask.  freqIndex must be valid for the
+ * vector of frequencies passed to setFrequencies().  Only
+ * Stokes parameters Q and U are valid for leakage masks, as
+ * leakage is by definition the % leakage of I into these modes.
+ */
+void SimVis::installLeakImage(Image& image, Stokes::Param stokes, 
+			      unsigned freqIndex)
+{
+  checkNpix(image);
+  checkFrequency(freqIndex);
+
+  if(leak_.size() < frequencies_.size())
+    leak_.resize(frequencies_.size());
+
+  leak_[freqIndex].getImage(stokes) = image;
+  leak_[freqIndex].mask_ |= stokes;
+} 
+
+/**.......................................................................
+ * Install a beam.  freqIndex must be valid for the vector of
+ * frequencies passed to setFrequencies().  Stokes parameter is
+ * assumed to be I for the beam.
+ */
+void SimVis::installBeamImage(Image& image, unsigned freqIndex)
+{
+  checkNpix(image);
+  checkFrequency(freqIndex);
+
+  if(beam_.size() < frequencies_.size())
+    beam_.resize(frequencies_.size());
+
+  // Make sure the beam is normalized
+
+  double bmmax = image.data_[0];
+  for(unsigned i=0; i < image.data_.size(); i++)
+    bmmax = (bmmax > image.data_[i]) ? bmmax : image.data_[i];
+
+  for(unsigned i=0; i < image.data_.size(); i++)
+    image.data_[i] /= bmmax;
+
+  beam_[freqIndex].getImage(Stokes::STOKES_I) = image;
+  beam_[freqIndex].mask_ |= Stokes::STOKES_I;
+
+#ifdef SIM_DEBUG
+  PgUtil::v_grey2(256*256, &beam_[freqIndex].I_.data_[0], 256, 256);
+#endif
+
+}
+
+/**.......................................................................,
+ * Check if a passed image is incompatible with an existing npix
+ */
+void SimVis::checkNpix(Image& image)
+{
+  if(!(defMask_ & DEF_NPIX)) {
+    ThrowError("No image npix has been defined");
+  }
+
+  if(npix_ * npix_ != image.data_.size()) {
+    ThrowError("Image is not " << npix_ << " x " << npix_);
+  }
+}
+
+/**.......................................................................,
+ * Check if the passed frequency index is valid
+ */
+void SimVis::checkFrequency(unsigned& freqIndex)
+{
+  if(!(defMask_ & DEF_FREQ)) {
+    ThrowError("No frequencies have been defined");
+  }
+  
+  if(frequencies_.size() == 0 || freqIndex > frequencies_.size() - 1) {
+    ThrowError("Frequency index " << freqIndex << " is out of range. Valid indices are: 0 - " << frequencies_.size()-1);
+  }
+}
+
+/**.......................................................................,
+ * Check if the passed frequency index is valid for the vector
+ */
+void SimVis::checkFrequency(unsigned& freqIndex, std::vector<SimStokesImage>& vec)
+{
+  // Make sure the index doesn't exceed the maximum possible specified
+  // frequency
+
+  checkFrequency(freqIndex);
+
+  // Now check if the index exceeds the particular vector that was
+  // passed
+
+  if(freqIndex > vec.size() - 1) {
+
+    // If the vector contains a single image, assume that we are using
+    // the same image for all frequencies
+
+    if(vec.size() == 1) {
+      freqIndex = 0;
+
+      // Else throw an error
+
+    } else {
+      ThrowError("Frequency index is out of range. "
+		 "Valid indices are: 0 - " << frequencies_.size());
+    }
+  }
+}
+
+void SimVis::checkRequiredParameters(unsigned freqIndex, Stokes::Param stokes) 
+{
+  unsigned mask = (unsigned)defMask_;
+
+  checkFrequency(freqIndex);
+
+  if(!(mask & DEF_SIZE)) {
+    ThrowError("No image size has been specified");
+  }
+  
+  if(!(mask & DEF_NPIX)) {
+    ThrowError("No image npix has been specified");
+  }
+
+  // Check if there are any images for this stokes parameter
+
+  if(!((cmb_.mask_ & stokes) || (fg_[freqIndex].mask_ & stokes))) {
+    ThrowError("No images exist for stokes parameter: " << stokes);
+  }
+}
+
+/**.......................................................................
+ * 'Observe an image'
+ *
+ * This method installs the composite CMB + FG + Leakage image for
+ * this Stokes parameter, this frequency, enveloped by the primary
+ * beam, and transforms it.  
+ *
+ * The result can be passed to getVis() to return the visibility at a
+ * particular (u, v) coordinate.
+ */
+void SimVis::observeImage(unsigned freqIndex, FT& trans, Stokes::Param stokes)
+{
+  // Sanity checks
+
+  checkRequiredParameters(freqIndex, stokes);
+  
+  // Make sure the container is initialized
+
+  trans.initialize(npix_, npix_);
+
+  // And install the combination of images
+
+  installStokesImage(trans, freqIndex, stokes);
+
+  // And compute the transform.
+  
+  (void) rfftwnd_one_real_to_complex(trans.plan_, &trans.data_[0], NULL);
+
+  int nx = trans.n_actual_[0];
+  int ny = trans.n_actual_[1];
+  fftw_complex *complx = (fftw_complex *)(&trans.data_[0]);
+  int ind;
+  
+  for(unsigned ix=0; ix < nx/2; ix++) {
+    for(unsigned iy=0; iy < ny; iy++) {
+      ind = ix + iy*(nx/2);
+      
+      // We multiply alternate elements by -1 to undo the effect
+      // of the shift.
+      
+      complx[ind].re *= (iy%2==0 ? -1 : 1)*(ix%2==0 ? -1 : 1);
+      complx[ind].im *= (iy%2==0 ? -1 : 1)*(ix%2==0 ? -1 : 1);
+    }
+  }
+  
+  // And set the zero-frequency (nx = 0, ny = n/2) to zero for
+  // simplicity
+  
+  ind = 0 + (trans.n_actual_[1]/2)*(trans.n_actual_[0]/2);
+  complx[ind].re = 0.0;
+  complx[ind].im = 0.0;
+}
+
+/**.......................................................................
+ * Install the requested Stokes image into the FT container
+ */
+void SimVis::installStokesImage(FT& trans, unsigned freqIndex, 
+				Stokes::Param stokes) 
+{
+  // All calculations will proceed in radians.  Check the units of the
+  // input image.
+
+  int ix, iy, xind, yind;
+  int ixmid, iymid;
+  
+  // Get the width of the gaussian function we will divide the image
+  // by to correct for the convolution in the UV plane.
+
+  double sigx = trans.n_data_[0]/(2*M_PI)/CONV_SIG;
+  double sigy = trans.n_data_[1]/(2*M_PI)/CONV_SIG;
+  double arg,wt;
+
+  Image* beam  = 0;
+  Image* leak  = 0;
+  Image* cmb   = 0;
+  Image* fg    = 0;
+  Image* cmb_I = 0;
+  Image* fg_I  = 0;
+
+  double val=0.0;
+  
+  // If offset leakages are being included, and this is Q or U, get
+  // the leakage mask.  We also need the CMB and ptsrc I images
+
+  if(includeOffsetLeakage_ && 
+     (stokes == Stokes::STOKES_Q || stokes == Stokes::STOKES_U)) {
+
+    // Get the leakage mask for this Stoke parameter
+
+    leak  = getImage(SIM_LEAK,  freqIndex, stokes);
+
+    // Get the foreground Stokes I image
+
+    fg_I  = getImage(SIM_FG, freqIndex, Stokes::STOKES_I);
+    cmb_I = getImage(SIM_CMB, freqIndex, Stokes::STOKES_I);
+  }
+  
+  // Get the appropriate beam (if any)
+
+  beam = getImage(SIM_BEAM, freqIndex, stokes);
+
+  // Get the appropriate CMB image (if any)
+
+  cmb = getImage(SIM_CMB, freqIndex, stokes);
+
+  // Get the appropriate foreground image (if any)
+
+  fg = getImage(SIM_FG, freqIndex, stokes);
+
+  // Store the indices of the center pixel of the image.
+
+  ixmid = npix_/2;
+  iymid = npix_/2;
+  
+  // Iterate over all image pixels which contain data.
+
+  unsigned imind, ftind;
+  for(iy=0; iy < npix_; iy++) { 
+    for(ix=0; ix < npix_; ix++) {
+      
+      // This pixel will be installed in center of the transform array
+      // at a location modified by the extra 2 elements in the x-axis,
+      // modulo any buffering we may also have to do to make the array
+      // a power of 2 in each dimension.
+
+      ftind = ((iy + npix_/2) * trans.n_actual_[0] + (ix + npix_/2));
+
+      xind = ix;
+      yind = iy;
+      
+      // Get the value of the function which will correct for the UV
+      // convolution
+
+      arg = (xind-ixmid)*(xind-ixmid)/(2*sigx*sigx)+
+	(yind-iymid)*(yind-iymid)/(2*sigy*sigy);
+      wt = exp(arg);
+
+      imind = yind * npix_ + xind;
+
+      // Install the image in the transform array, shifting in y
+
+      val = 0.0;
+
+      // Add in the sky signal = CMB + any foregrounds
+
+      if(cmb) {
+	val += (cmb->nativeToJy_ * cmb->data_[imind]);
+      }
+
+      if(fg) {
+	val +=  (fg->nativeToJy_ *  fg->data_[imind]);
+      }
+
+      // If a leakage mask is present, add to Stokes Q and U the
+      // appropriate percentage of I.  If the leakage masks are to be
+      // interpreted as absolute leakages, we cannot add them here,
+      // but they must be added after the beam envelope.
+
+      if(leak && !treatAsAbsoluteLeakage_) {
+	
+	// Increment the pixel values by the leakage from the CMB
+
+	if(cmb_I)
+	  val += leak->data_[imind] * (cmb_I->nativeToJy_ * cmb_I->data_[imind]);
+	
+	// Increment the pixel value by the leakage from the
+	// foreground component
+
+	if(fg_I)
+	  val += leak->data_[imind] * (fg_I->nativeToJy_ * fg_I->data_[imind]);
+      }
+      
+      // Now install this value back in the transform container,
+      // enveloped with the beam.
+
+      trans.data_[ftind] = val * wt * (iy%2==0 ? 1 : -1) * 
+	(beam ? beam->data_[imind] : 1.0);
+    }
+  }
+
+  // Finally, add any absolute leakage
+
+  if(leak && treatAsAbsoluteLeakage_) {
+    
+    // Iterate over all image pixels which contain data.
+
+    for(iy=0; iy < npix_; iy++) {
+      for(ix=0; ix < npix_; ix++) {
+	
+	// This pixel will be installed in center of the transform
+	// array at a location modified by the extra 2 elements in the
+	// x-axis, modulo any buffering we may also have to do to make
+	// the array a power of 2 in each dimension.
+
+	ftind = ((iy + npix_/2) * trans.n_actual_[0] + (ix + npix_/2));
+	
+	xind = ix;
+	yind = iy;
+	
+	// Get the value of the function which will correct for the UV
+	// convolution
+
+	arg = (xind-ixmid)*(xind-ixmid)/(2*sigx*sigx)+
+	  (yind-iymid)*(yind-iymid)/(2*sigy*sigy);
+	wt = exp(arg);
+	
+	imind = yind * npix_ + xind;
+	
+	// The CMB component here is just the absolute offset leakage
+	// from the I image
+
+	val = 0.0;
+
+	if(cmb_I)
+	  val += leak->data_[imind] * (cmb_I->nativeToJy_ * cmb_I->data_[imind]);
+	
+	// Add the point source component, if any, here.  Point source
+	// images are assumed to be in Jy, so no conversion is
+	// necessary.
+	//
+	// Here we just add the leakage from the point source
+	// component (if any)
+
+	if(fg_I)
+	  val += leak->data_[imind] * (fg_I->nativeToJy_ * fg_I->data_[imind]);
+	
+	// Now install this value back in the transform container,
+	// making sure we don't overwrite the data array, but only
+	// _increment_ it!
+
+	trans.data_[ftind] += val * wt * (iy%2==0 ? 1 : -1);  
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Compute the Re and Im visibility from the transform of an image.
+ *
+ * We do this by convolving with a gaussian function over a finite
+ * pixel mask.  The effect of the convolution is taken care of in the
+ * image plane by dividing by the appropriate gaussian.
+ */
+void SimVis::getVis(FT& trans, double u, double v, double& re, 
+		    double& im, bool& badvis)
+{
+  static const unsigned NMASK = 2;
+  int nu, nv;
+  float umin, vmin;
+  int iulo, iuhi, ivlo, ivhi;
+  int im_sign=-1;
+
+  badvis = false;
+  
+  // If no transform was passed, just fill with bogus values.
+
+  if(!trans.initialized_) {
+    re = 1.0;
+    im = 0.0;
+  } else {
+
+    // Else read off the visibilities from the transform.  The
+    // transform contains the half-plane in u, full-plane in v.  I've
+    // shifted the transform so that it is centered on the center of
+    // the array in v.  (But on the left (zero-frequency) edge in u)
+    
+    double du,dv,dx,dy;
+    fftw_complex* complx = (fftw_complex *)(&trans.data_[0]);
+
+    // Number of elements in the complex array.
+
+    nu = trans.n_data_[0]/4; // This is just the halfplane of the
+				  // unpadded half of the input array
+    nv = trans.n_data_[1]/2;  // This is just the unpadded half of
+				  // the input image array
+    
+    dx = dx_.radians();
+    dy = dx_.radians();
+
+    // The u-axis only goes from 0 to umax.  Resolution in u is set by
+    // the full size of the input array, including padding, which is
+    // trans->n_data[0] = 4*nu
+
+    du = 1.0/(4*nu*dx);
+
+    // The v-axis goes from -vmax to vmax.  Resolution in v is set by
+    // the full size of the input array, which is trans->n_data[0] =
+    // 4*nv;
+
+    dv = 1.0/(2*nv*dy);
+    
+    // zero frequency is at the center of the ny/2 pixel
+
+    vmin = -1.0/(4*dy) - 0.5*dv;
+    
+    // And at the center of the first pixel, in u.
+
+    umin = -0.5*du;
+
+    // Convert to the half plane for which we have data.  We'll force
+    // this to be u +ive
+
+    if(u < 0) {
+      im_sign = 1; /* We have to flip the sign of the Im component
+		      from the other half-plane, to make the transform
+		      Hermitian */
+      u = -u;
+      v = -v;
+    }
+    
+    // Convert the u and v to fractional pixel values.  umin and vmin
+    // are the values of u and v at the extreme edges of the arrays,
+    // so a value of u == umin is effectively at pixel -0.5.
+
+    {
+      float fu,fv;
+      int iu,iv;
+
+      fu = (u-umin)/du-0.5; // The approximate "pixel" value
+      fv = (v-vmin)/dv-0.5;
+
+      iu = (int)floor(fu);
+      iv = (int)floor(fv);
+
+      iulo = iu-NMASK;  // The low bracketing pixel
+      ivlo = iv-NMASK;
+      iuhi = iu+NMASK;  // The high bracketing pixel
+      ivhi = iv+NMASK;
+      
+      // If the point lies past the middle of the terminal pixels, but
+      // not more than one pixel away, extrapolate from the two edge
+      // pixels.
+
+      if(iulo < 0) 
+	iulo = 0;
+      if(ivlo < 0) 
+	ivlo = 0;
+
+      if(iuhi > nu-1) 
+	iuhi = nu-1;
+      if(ivhi > nv-1) 
+	ivhi = nv-1;
+      
+      // Finally, convolve.  If no good bracketing values were found,
+      // set this component to 0.0
+
+      if(iu < 0 || iv < 0 || iu > nu-1 || iv > nv) {
+
+	re = 0.0;
+	im = 0.0;
+	badvis = true;
+
+      } else {
+      
+      // Else interpolate from a square of bracketing pixels.
+
+	int i,j,ind;
+	float s2=2*CONV_SIG*CONV_SIG;
+	double arg,wt,wtsum=0.0;
+	
+	// Convolve this value off of the grid, iterating over the
+	// pixel mask
+
+	re = 0.0;
+	im = 0.0;
+	
+	for(i=iulo;i <= iuhi;i++)
+	  for(j=ivlo;j <= ivhi;j++) {
+	    
+	    // Get the value of the convolution function at this
+	    // pixel.
+
+	    arg = ((fu-i)*(fu-i)+(fv-j)*(fv-j))/s2;
+	    wt = exp(-arg);
+	    
+	    // Shift to the center half in v.
+
+	    iu = i;
+	    iv = j + trans.n_actual_[1]/4;
+	    
+	    // Get the index in the complex array.
+
+	    ind = iu + (trans.n_actual_[0]/2)*iv;
+	    
+	    // Store running means
+
+	    re += (complx[ind].re - re)*wt/(wtsum+wt); 
+	    im += (complx[ind].im - im)*wt/(wtsum+wt); 
+
+	    wtsum += wt;
+	  }
+
+	im *= im_sign;
+      }
+    }
+  }
+}
+
+/**.......................................................................
+ * Get the u,v coordinates corresponding to each (real) index of the
+ * transform
+ */
+void SimVis::
+getAbs(FT& trans, std::vector<float>& avec, std::vector<float>& uvec, std::vector<float>& vvec)
+{
+  static const unsigned NMASK = 2;
+  int nu, nv;
+  float umin, vmin;
+  int iulo, iuhi, ivlo, ivhi;
+  int im_sign=-1;
+  
+  // The transform contains the half-plane in u, full-plane in v.
+  // I've shifted the transform so that it is centered on the center
+  // of the array in v.  (But on the left (zero-frequency) edge in
+  // u)
+  
+  double du,dv,dx,dy;
+  fftw_complex* complx = (fftw_complex *)(&trans.data_[0]);
+  
+  // Number of elements in the complex array.
+  
+  nu = trans.n_data_[0]/4; // This is just the halfplane of the
+			   // unpadded half of the input array
+  nv = trans.n_data_[1]/2; // This is just the unpadded half of the
+			   // input image array
+  dx = dx_.radians();
+  dy = dx_.radians();
+
+  // The u-axis only goes from 0 to umax.  Resolution in u is set by
+  // the full size of the input array, including padding, which is
+  // trans->n_data[0] = 4*nu
+  
+  du = 1.0/(4*nu*dx);
+  
+  // The v-axis goes from -vmax to vmax.  Resolution in v is set by
+  // the full size of the input array, which is trans->n_data[0] =
+  // 4*nv;
+  
+  dv = 1.0/(2*nv*dy);
+  
+  // zero frequency is at the center of the ny/2 pixel
+  
+  vmin = -1.0/(4*dy) - 0.5*dv;
+  
+  // And at the center of the first pixel, in u.
+  
+  umin = -0.5*du;
+  
+  avec.resize(nu*nv);
+  uvec.resize(nu*nv);
+  vvec.resize(nu*nv);
+
+  unsigned indi, indo;
+
+  for(unsigned iu=0; iu < nu; iu++) {
+    for(unsigned iv=0; iv < nv; iv++) {
+
+      indo = iu + nu * iv;
+
+      iv += trans.n_actual_[1]/4; 
+      indi = iu + trans.n_actual_[0]/2 * iv; 
+
+      uvec[indo] = umin + iu * du;
+      vvec[indo] = vmin + iv * dv;
+      avec[indo] = sqrt(complx[indi].re * complx[indi].re + complx[indi].im * complx[indi].im);
+    }
+  }
+
+}
+
+/**.......................................................................
+ * Return a pointer to the requested image, or NULL if no such
+ * image exists
+ */
+Image* 
+SimVis::getImage(ImType type, unsigned freqIndex, Stokes::Param stokes)
+{
+  Image* image = 0;
+
+  switch(type) {
+
+    // If the CMB image was requested, return the appropriate Stokes
+    // parameter, and compute the conversion from native units to Jy.
+
+  case SIM_CMB:
+    checkFrequency(freqIndex);
+    image = &(cmb_.getImage(stokes));
+    //image->setNativeToJy(frequencies_[freqIndex], dx_);
+    break;
+
+    // If the foreground image was requested, return the appropriate
+    // Stokes parameter, and compute the conversion from native units
+    // to Jy.
+
+  case SIM_FG:
+    checkFrequency(freqIndex, fg_);
+    image = &(fg_[freqIndex].getImage(stokes));
+    //    image->setNativeToJy(frequencies_[freqIndex], dx_);
+    break;
+
+    // If a leakage mask requested, just return the appropriate Stokes
+    // parameter.
+
+  case SIM_LEAK:
+    checkFrequency(freqIndex, leak_);
+    image = &(leak_[freqIndex].getImage(stokes));
+    break;
+
+    // If a beam was requested, just return the beam.
+
+  case SIM_BEAM:
+    checkFrequency(freqIndex, beam_);
+    image = &(beam_[freqIndex].getImage(stokes));
+    break;
+
+  default:
+    ThrowError("Unrecognized image type: " << type);
+    break;
+  }
+
+  return image->hasData_ ? image : 0;
+}
+
+//-----------------------------------------------------------------------
+// Methods of struct SimVis::FT
+//-----------------------------------------------------------------------
+
+/**.......................................................................
+ * Constructor
+ */
+SimVis::FT::FT() 
+{
+  initialized_ = false;
+};
+
+/**.......................................................................
+ * Destructo
+ */
+SimVis::FT::~FT() {}
+
+/**.......................................................................
+ * Initialize a Fourier Transform container
+ */
+void SimVis::FT::initialize(unsigned nx, unsigned ny)
+{
+  // Check that the axes are powers of 2.
+  //
+  // And make the transform array twice as big as the image, to avoid
+  // aliasing.
+
+  n_data_[0] = static_cast<int>(2*pow((double) 2.0f, (double) floor((log((double)nx)/log(2.0)+0.5))));
+  n_data_[1] = static_cast<int>(2*pow((double) 2.0f, (double) floor((log((double)ny)/log(2.0)+0.5))));
+  
+  // Also expand the x-array size by 2 as required by the fftw
+  // algorithm for real transforms.
+
+  n_actual_[0] = n_data_[0]+2;
+  n_actual_[1] = n_data_[1];
+  
+  // Allocate the data array itself.
+
+  data_.resize(n_actual_[0]*n_actual_[1]);
+
+  for(unsigned i=0;i < n_actual_[0]*n_actual_[1];i++)
+    data_[i] = 0.0;
+  
+  // And create the plan.
+
+  plan_ = NULL;
+  if((plan_ = rfftwnd_create_plan(2, n_data_, FFTW_REAL_TO_COMPLEX, 
+				  FFTW_ESTIMATE | FFTW_IN_PLACE))==NULL) {
+    ThrowError("Insufficient memory to allocate transform plan.");
+  }
+
+  initialized_ = true;
+}
+
+//-----------------------------------------------------------------------
+// Methods of SimStokesImage
+//-----------------------------------------------------------------------
+
+SimVis::SimStokesImage::SimStokesImage() 
+{
+  mask_ = Stokes::STOKES_NONE;
+};
+
+SimVis::SimStokesImage::~SimStokesImage() 
+{
+  mask_ = Stokes::STOKES_NONE;
+};
+
+/**.......................................................................
+ * Return the image for the requested Stokes parameter
+ */
+Image& SimVis::SimStokesImage::getImage(Stokes::Param stokes) 
+{
+  switch(stokes) {
+  case Stokes::STOKES_I:
+    return I_;
+    break;
+  case Stokes::STOKES_Q:
+    return Q_;
+    break;
+  case Stokes::STOKES_U:
+    return U_;
+    break;
+  default:
+    ThrowError("Unrecognized stokes parameter: " << stokes);
+    break;
+  }
+}
+
+//-----------------------------------------------------------------------
+// Methods of SimImage
+//-----------------------------------------------------------------------
+
+SimVis::SimImage::SimImage() 
+{
+  initialized_ = false;
+  data_.resize(0);
+};
+
+SimVis::SimImage::SimImage(std::vector<float>& data, SimVis::SimImage::Units units)
+{
+  initialize(data, units);
+}
+
+void SimVis::SimImage::initialize(double* data, unsigned ndata, SimVis::SimImage::Units units)
+{
+  data_.resize(ndata);
+
+  for(unsigned i=0; i < ndata; i++)
+    data_[i] = (float)data[i];
+
+  units_ = units;
+  initialized_ = true;
+}
+
+void SimVis::SimImage::initialize(std::vector<float>& data, SimVis::SimImage::Units units)
+{
+  data_ = data;
+  units_ = units;
+  initialized_ = true;
+}
+
+SimVis::SimImage::~SimImage() 
+{
+  initialized_ = false;
+};
+
+SimVis::SimImage::SimImage(const SimImage& image)
+{
+  *this = (SimImage&) image;
+}
+
+SimVis::SimImage::SimImage(SimImage& image)
+{
+  *this = image;
+}
+
+void SimVis::SimImage::SimImage::operator=(const SimImage& image)
+{
+  *this = (SimImage&) image;
+}
+
+void SimVis::SimImage::SimImage::operator=(SimImage& image)
+{
+  initialized_ = image.initialized_;
+  data_        = image.data_;
+  units_       = image.units_;
+  nativeToJy_  = image.nativeToJy_;
+}
+
+/**.......................................................................
+ * Set the size of this image
+ */
+void SimVis::SimImage::setSize(Angle size)
+{
+  size_ = size;
+}
+
+/**.......................................................................
+ * Determine the conversion from native image units to Jy
+ */
+void SimVis::SimImage::setNativeToJy(Frequency& nu, Angle& dx)
+{
+  if(!initialized_)
+    return;
+
+  switch (units_) {
+
+    // If the image is already in Jy, we don't have to do anything
+
+  case UNITS_JY:
+    nativeToJy_ = 1.0;
+    break;
+
+    // If the image is in microK, we have to convert to Planck
+    // intensity, and scale by the pixel size
+
+  case UNITS_UK:
+
+    nativeToJy_ = Planck::JyPerSrPerKPlanck(nu, Constants::Tcmb_) 
+      * dx.radians() * dx.radians() * 1e-6;
+    break;
+
+  case UNITS_Y:
+    {
+      Intensity intensity = SzCalculator::comptonYToIntensity(nu);
+      nativeToJy_ = intensity.JyPerSr() * dx.radians() * dx.radians();
+    }
+    break;
+
+  default:
+    ThrowError("Unrecognized units: " << units_);
+    break;
+  }
+}
+
+#ifdef SIM_DEBUG
+void SimVis::pltrans(FT& trans)
+{
+  int n,nx,ny;
+  nx = trans.n_actual_[0];
+  ny = trans.n_actual_[1];
+  n = nx*ny;
+  PgUtil::v_grey2(n,(float*)&trans.data_[0], nx, ny, 0, nx-1, 0, ny-1);
+}
+#endif

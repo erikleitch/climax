@@ -1,0 +1,174 @@
+#include <iostream>
+#include <math.h>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/models/GaussianClusterModel.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/GaussianVariate.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Stats.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Dft2d.h"
+#include "gcp/fftutil/Image.h"
+
+using namespace std;
+using namespace gcp::util;
+using namespace gcp::program;
+using namespace gcp::models;
+
+KeyTabEntry Program::keywords[] = {
+  { "dev",      "/xs",                                              "s", "Pgplot device"},
+  { "scale",    "1.85", "d", "scale"},
+  { "file",     "/Users/eml/projects/meerkat/meerkatImDetail.fits",       "s", "FITS file to read in"},
+  { "pospixfile",  "/Users/eml/projects/meerkat/pospixAll.txt",     "s", "position file"},
+  { "posmeterfile",  "/Users/eml/projects/meerkat/posmeterAll.txt",     "s", "position file"},
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+
+void loadPosFile(std::string fileName, std::vector<double>& xv, std::vector<double>& yv)
+{
+  static String line;
+
+  std::ifstream fin;
+  fin.open(fileName.c_str(), ios::in);
+
+  if(!fin)
+    ThrowSimpleColorError(std::endl << "Unable to open file: " << fileName, "red");
+
+  try {
+
+    //------------------------------------------------------------                                              
+    // Iterate through the file                                                                                 
+    //------------------------------------------------------------                                              
+
+    while(!fin.eof()) {
+      line.initialize();
+      getline(fin, line.str());
+
+      line.strip(' ');
+      double x, y;
+      if(!line.isEmpty()) {
+
+	COUT("about to parse line: " << line);
+	x = line.findNextInstanceOf(" ", false, ",", true, false).toDouble();
+	y = line.findNextInstanceOf(",", true, " ", false, true).toDouble();
+
+	xv.push_back(x);
+	yv.push_back(y);
+      }
+
+    }
+
+  } catch(Exception& err) {
+    fin.close();
+    ThrowSimpleError(err.what());
+  }
+
+  fin.close();
+
+}
+
+int Program::main()
+{
+  std::string file    = Program::getStringParameter("file");
+  std::string pospixfile = Program::getStringParameter("pospixfile");
+  std::string posmeterfile = Program::getStringParameter("posmeterfile");
+  double scale = Program::getDoubleParameter("scale");
+
+  //------------------------------------------------------------
+  // If a device was specified, open it now
+  //------------------------------------------------------------
+
+  PgUtil::open(Program::getStringParameter("dev").c_str());
+
+  Image image;
+  image.initializeFromFitsFile(file);
+  image.display();
+
+  std::vector<double> x;
+  std::vector<double> y;
+  std::vector<double> xm;
+  std::vector<double> ym;
+
+  loadPosFile(pospixfile, x, y);
+  loadPosFile(posmeterfile, xm, ym);
+
+  COUT("Found " << x.size() << " points");
+
+  PgUtil::setOverplot(true);
+
+  double x1s = 473.91;
+  double y1s = 566.92;
+
+  double x2s = 473.91;
+  double y2s = 581.99;
+
+  double x1l = 583.423645;
+  double y1l = 523.113037;
+
+  double x2l = 583.267090;
+  double y2l = 526.144165;
+
+  // Roughly calibrate the image scale:
+
+  double rpixs = sqrt((x1s-x2s)*(x1s-x2s) + (y1s-y2s)*(y1s-y2s));
+  double rpixl = sqrt((x1l-x2l)*(x1l-x2l) + (y1l-y2l)*(y1l-y2l));
+
+#if 1
+  double rpix = rpixs;
+#else
+  double rpix = rpixl;
+#endif
+  double rMeter = 13.5;
+
+  double nxpix = image.xAxis().getNpix();
+  double nypix = image.yAxis().getNpix();
+
+#if 1
+  double xfid = 414.70;
+  double yfid = 545.37;
+#else
+  double xfid = 575.721802;
+  double yfid = 522.782043;
+#endif
+
+  bool first = true;
+  double rmin, r;
+  double nbase = 0;
+  for(unsigned i=0; i < x.size(); i++) {
+    for(unsigned j=0; j < x.size(); j++) {
+
+      if(i != j) {
+
+	r = sqrt((xm[i] - xm[j])*(xm[i] - xm[j]) + (ym[i] - ym[j])*(ym[i] - ym[j]));
+
+	if(first) {
+	  first = false;
+	  rmin = r;
+	} 
+
+	if(r < rmin) {
+	  rmin = r;
+	}
+
+	if(r < 13.5)
+	  COUT(xm[i] << ", " << ym[i] << " and " << xm[j] << ", " << ym[j] << " are too close together");
+      }
+    }
+  }
+
+  COUT("Rmin = " << rmin << " nbase = " << nbase);
+
+  for(unsigned i=0; i < x.size(); i++) {
+    PgUtil::plotPoint(x[i], y[i], 1);
+  }
+
+  return 0;
+}

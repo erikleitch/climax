@@ -1,0 +1,24 @@
+adddataset type=uvf name=rxj1;
+rxj1.file = RXJ1210.uvf;
+rxj1.display = true;
+rxj1.uvmax = 2000;
+
+addmodel type=arnaudmodel name=mod;
+mod.m500 = 1e14:1e15 Msolar;
+mod.xoff = -0.01:0.01 deg;
+mod.yoff = -0.01:0.01 deg;
+mod.spectralType = sz;
+mod.normalizationFrequency = 30 GHz;
+
+addmodel name=cosmo type=cosmo;
+cosmo.z      = 0.168;
+cosmo.H0     = 70 km/s/Mpc;
+cosmo.omegaM = 0.3;
+cosmo.omegaL = 0.7;
+
+nburn = 3000;
+ntry = 10000;
+
+stat = upper;
+nsigma = 2.0;
+

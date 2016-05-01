@@ -1,0 +1,11 @@
+COMPILE_WITH_DEBUG = 0
+MATLAB_PATH        =
+PYTHON_INC_PATH    =
+NUMPY_INC_PATH     =
+ARCH               =
+GFORTRAN_LD_PATH   =
+
+
+
+
+

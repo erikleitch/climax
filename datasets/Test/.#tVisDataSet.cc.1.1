@@ -1,0 +1,548 @@
+#include <iostream>
+#include <math.h>
+
+#include "gcp/program/Program.h"
+
+#include "gcp/util/Exception.h"
+#include "gcp/util/LogStream.h"
+#include "gcp/util/IoLock.h"
+#include "gcp/util/Exception.h"
+#include "gcp/util/FitsBinTableReader.h"
+#include "gcp/util/FitsUvfReader.h"
+#include "gcp/util/OsInfo.h"
+#include "gcp/util/Timer.h"
+
+#include "gcp/pgutil/PgUtil.h"
+
+#include "gcp/fftutil/Dft2d.h"
+#include "gcp/fftutil/Image.h"
+
+#include "gcp/datasets/VisDataSetUvf.h"
+
+#include "gcp/models/GaussianClusterModel.h"
+#include "gcp/models/PtSrcModel.h"
+
+using namespace std;
+using namespace gcp::datasets;
+using namespace gcp::models;
+using namespace gcp::program;
+using namespace gcp::util;
+
+KeyTabEntry Program::keywords[] = {
+  { "dev",      "/xs",            "s", "Pgplot device"},
+  { "file",     "",               "s", "FITS file to read in"},
+  { "zeropad",  "f",              "b", "Zeropad the array?"},
+  { "phase",    "0.0",            "d", "Phase (degrees)"},
+  { "period",   "64",             "d", "Period (pixels)"},
+  { "freq",     "30",             "d", "freq (GHz)"},
+  { "perc",     "0.98",           "d", "percent correlation"},
+  { END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS,END_OF_KEYWORDS},
+};
+
+void Program::initializeUsage() {};
+
+void testReader(std::string& file);
+void testChisqCalc(std::string& file, double perc);
+void testSimulator(std::string& file, double perc);
+void testReplacePtSrc(std::string& file, double perc);
+void testReplaceGauss(std::string& file, double perc);
+void computeChisqPtSrc(Angle& xOff, Angle& yOff, PtSrcModel& ptsrc, VisDataSet& vds);
+
+int Program::main()
+{
+  std::string file = Program::getStringParameter("file");
+  double perc      = Program::getDoubleParameter("perc");
+
+  //testChisqCalc(file, perc);
+  //  testSimulator(file, perc);
+  //  testReplacePtSrc(file, perc);
+  testReplaceGauss(file, perc);
+}
+
+/**.......................................................................
+ * Test the chi-squared calculation
+ */
+void testChisqCalc(std::string& file, double perc)
+{
+  VisDataSetUvf vds;
+
+  // Determine what we can from the UVF file
+
+  vds.initializeFromFile(file);
+
+  // Now iterate through the UVF file, reading each group to determine
+  // how many baselines actually belong to each baseline group, and
+  // what the maximum UV radius encountered is.
+
+  vds.countData(file);
+
+  // Here's where we actually read the data
+
+  vds.loadData(file, perc);
+
+  // Now calculate primary beams
+
+  vds.computePrimaryBeams();
+
+  // Define a model component
+
+  PtSrcModel ptsrc;
+  ptsrc.setSpectralIndex(0.0);
+  ptsrc.setGHz(30.0);
+
+  // Compute chisq
+
+  ptsrc.setJy(100);
+  vds.addModel(ptsrc);
+  ChisqVariate chisq = vds.computeChisq();
+  COUT("Chisq = " << chisq << " pte = " << chisq.pte());
+
+#if 1
+  ptsrc.setJy(99);
+  vds.addModel(ptsrc);
+  chisq = vds.computeChisq();
+  COUT("Chisq = " << chisq << " pte = " << chisq.pte());
+
+  ptsrc.setJy(101);
+  vds.addModel(ptsrc);
+  chisq = vds.computeChisq();
+  COUT("Chisq = " << chisq << " pte = " << chisq.pte());
+#endif
+
+}
+
+void testSimulator(std::string& file, double perc)
+{
+  VisDataSetUvf vds;
+
+  vds.setupForSimulation(true);
+
+  // Determine what we can from the UVF file
+
+  vds.initializeFromFile(file);
+
+  // Now iterate through the UVF file, reading each group to determine
+  // how many baselines actually belong to each baseline group, and
+  // what the maximum UV radius encountered is.
+
+  vds.countData(file);
+
+  // Here's where we actually read the data
+
+  COUT("Loading data:");
+  vds.loadData(file, perc);
+
+#if 1
+  COUT("About to write UVF file");
+  vds.writeUvfFile("uvfTest.uvf");
+#endif
+
+  // Test the simulation routine
+
+  Lla lla;
+  lla.setCoordSystem(COORD_GEOCENTRIC);
+  lla.latitude_ = Angle(Angle::Degrees(), "-20:00:00");
+  vds.getObs().setArrayLocation(lla);
+
+  HourAngle start, stop, delta;
+
+  start.setHours(-3);
+  stop.setHours(3);
+  delta.setHours(0.1);
+
+  vds.getObs().setObsHa(start, stop, delta);
+
+  COUT("Here 0");
+
+  Image image1;
+  image1.setNpix(512);
+  image1.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image1.setUnits(Image::UNITS_JY);
+  Angle off(Angle::Degrees(), 0.1);
+  image1.createDeltaFunctionImage(2, off, off);
+
+  Image image2;
+  image2.setNpix(512);
+  image2.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image2.setUnits(Image::UNITS_JY);
+  Angle sigma(Angle::ArcMinutes(), 0.35);
+  Angle off2(Angle::Degrees(), -0.1);
+  image2.createGaussianImage(2, sigma, off2, off2);
+
+  Image image3;
+  image3.setNpix(512);
+  image3.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image3.setUnits(Image::UNITS_JY);
+  image3.createDeltaFunctionImage(1);
+
+  Image image4;
+  image4.setNpix(512);
+  image4.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image4.setUnits(Image::UNITS_K);
+  sigma.setArcMinutes(2.0);
+  image4.createGaussianImage(-0.5, sigma);
+
+  COUT("About to add image");
+
+  //  vds.addImage(image1);
+  //  vds.addImage(image2);
+  //  vds.addImage(image3);
+  vds.addImage(image4);
+
+  // Now calculate primary beams
+
+  COUT("Calculating primary beams:");
+  vds.computePrimaryBeams();
+
+  COUT("About to observe");
+  vds.observe(false);
+
+  COUT("About to write UVF file");
+  vds.writeUvfFile("uvfTest.uvf");
+}
+
+
+void testReplacePtSrc(std::string& file, double perc)
+{
+  //------------------------------------------------------------
+  // Test creating images of different sizes
+  //------------------------------------------------------------
+
+  //------------------------------------------------------------
+  // Create an image from a point source model
+  //------------------------------------------------------------
+
+  Angle xOff, yOff;
+  xOff.setArcMinutes(10*0.117188);
+  yOff.setArcMinutes(0.0);
+
+  Frequency freq;
+  freq.setGHz(30.0);
+
+  // Define a model component
+
+  PtSrcModel ptsrc;
+  ptsrc.setSpectralIndex(0.0);
+  ptsrc.setGHz(30.0);
+  ptsrc.setOffset(xOff, yOff);
+  ptsrc.setJy(1.0);
+
+  Image image;
+  image.setNpix(512);
+  image.xAxis().setAngularSize(Angle(Angle::Degrees(), 1.5));
+  image.yAxis().setAngularSize(Angle(Angle::Degrees(), 1.5));
+
+  ptsrc.fillSzImage(image, freq);
+
+  //------------------------------------------------------------
+  // Now we have an image of the offset point source
+  //------------------------------------------------------------
+
+  VisDataSetUvf vds;
+
+  vds.setupForSimulation(true);
+
+  // Determine what we can from the UVF file
+
+  vds.initializeFromFile(file);
+
+  // Now iterate through the UVF file, reading each group to determine
+  // how many baselines actually belong to each baseline group, and
+  // what the maximum UV radius encountered is.
+
+  vds.countData(file);
+
+  // Here's where we actually read the data
+
+  vds.loadData(file, image);
+
+  //------------------------------------------------------------
+  // Now replace internally stored visibilities with simulated ones
+  //------------------------------------------------------------
+
+  COUT("About to add image");
+
+  vds.addImage(image);
+
+  // Now calculate primary beams
+
+  vds.computePrimaryBeams();
+
+  Flux noiseRms;
+  noiseRms.setMilliJy(10.0);
+
+  vds.getObs().setFixedNoiseRms(noiseRms);
+  vds.getObs().setNoiseType(ObsInfo::NOISE_FIXED);
+  vds.getObs().seed(1);
+
+  vds.observe(true);
+
+#if 1
+  vds.writeUvfFile("uvfTest.uvf");
+#endif
+
+  // Now that we have internally replaced visibilities with simulated
+  // vis, 'load' the data again as if reading from an external file,
+  // to grid the simulated visibilities
+
+  vds.loadData(file, image);
+
+  // Now re-calculate primary beams to the size that the gridded data
+  // will support
+
+  vds.computePrimaryBeams();
+
+  //------------------------------------------------------------
+  // Test computing chisq for different point source models
+  //------------------------------------------------------------
+
+  ptsrc.setJy(1.0);
+  xOff.setArcMinutes(10*0.117188);
+  yOff.setArcMinutes(0.0);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(0.9);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(0.7);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(0.5);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(0.2);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(1.1);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(1.0);
+  yOff.setArcMinutes(0.0);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  ptsrc.setJy(0.5);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  xOff.setArcMinutes(1.5);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+
+  xOff.setArcMinutes(1.17188);
+  computeChisqPtSrc(xOff, yOff, ptsrc, vds);
+}
+
+void computeChisqPtSrc(Angle& xOff, Angle& yOff, PtSrcModel& ptsrc, VisDataSet& vds)
+{
+  Timer timer;
+  timer.start();
+  ptsrc.setOffset(xOff, yOff);
+  vds.addModel(ptsrc);
+  gcp::util::ChisqVariate chisq = vds.computeChisq();
+  timer.stop();
+
+  COUT("xOff = " << xOff << " yOff = " << yOff << " Chisq = " << chisq << " pte = " << chisq.pte());
+  COUT("Computation required: " << timer.deltaInSeconds() << " seconds");
+}
+
+ 
+void testReplaceGauss(std::string& file, double perc)
+{
+  VisDataSetUvf vds;
+  vds.setupForSimulation(true);
+
+  // Determine what we can from the UVF file
+
+  vds.initializeFromFile(file);
+
+  // Now iterate through the UVF file, reading each group to determine
+  // how many baselines actually belong to each baseline group, and
+  // what the maximum UV radius encountered is.
+
+  vds.countData(file);
+
+  // Here's where we actually read the data
+
+  vds.loadData(file, perc);
+
+  // Now replace internally stored visibilities with simulated ones
+
+  Image image;
+  image.setNpix(512);
+  image.setAngularSize(Angle(Angle::Degrees(), 1.0));
+  image.setUnits(Image::UNITS_UK);
+  Angle sigma;
+
+  sigma.setArcMinutes(2);
+  image.createGaussianImage(-5000, sigma);
+
+  vds.addImage(image);
+
+  // Now calculate primary beams
+
+  vds.computePrimaryBeams();
+
+  Flux noiseRms;
+  noiseRms.setMilliJy(10.0);
+
+  vds.getObs().setFixedNoiseRms(noiseRms);
+  vds.getObs().setNoiseType(ObsInfo::NOISE_FIXED);
+  vds.getObs().seed(1);
+
+  vds.observe(true);
+
+#if 0
+  vds.writeUvfFile("uvfTest.uvf");
+  return;
+#endif
+
+  // Now that we have internally replaced visibilities with simulated
+  // vis, 'load' the data again as if reading from an external file
+
+  vds.loadData(file, perc);
+
+  // Now re-calculate primary beams to the size that the gridded data
+  // will support
+
+  vds.computePrimaryBeams();
+
+  // Define a model component
+
+  GaussianClusterModel cluster;
+  Temperature tmax;
+
+  // Compute chisq
+
+  Timer timer;
+  timer.start();
+
+  tmax.setMicroK(-5000);
+  cluster.setTMax(tmax);
+  sigma.setArcMinutes(2);
+  cluster.setSigma(sigma);
+  vds.addModel(cluster);
+  ChisqVariate chisq = vds.computeChisq();
+  timer.stop();
+
+  COUT("Chisq = " << chisq << " pte = " << chisq.pte());
+  COUT("Computation required: " << timer.deltaInSeconds() << " seconds");
+  timer.start();
+
+  tmax.setMicroK(-5000);
+  cluster.setTMax(tmax);
+  sigma.setArcMinutes(1);
+  cluster.setSigma(sigma);
+  vds.addModel(cluster);
+  chisq = vds.computeChisq();
+  timer.stop();
+
+  COUT("Chisq = " << chisq << " pte = " << chisq.pte());
+  COUT("Computation required: " << timer.deltaInSeconds() << " seconds");
+  timer.start();
+
+  tmax.setMicroK(-8000);
+  cluster.setTMax(tmax);
+  sigma.setArcMinutes(2);
+  cluster.setSigma(sigma);
+  vds.addModel(cluster);
+  chisq = vds.computeChisq();
+  timer.stop();
+
+  COUT("Chisq = " << chisq << " pte = " << chisq.pte());
+  COUT("Computation required: " << timer.deltaInSeconds() << " seconds");
+}
+
+void testReader(std::string& file)
+{
+  gcp::util::FitsUvfReader reader(file);
+
+  COUT("RA  = " << reader.obsra());
+  COUT("DEC = " << reader.obsdec());
+
+  std::vector<double> freqs = reader.freqs();
+  double freq0 = freqs[0];
+
+  gcp::util::FitsBinTableReader tableReader(file);
+
+  bool stop=false;
+  while(!stop) {
+    try {
+      tableReader.getNextTableInfo();
+      COUT("Found table: " << tableReader.tableName());
+
+      for(int iCol=tableReader.nCol()-1; iCol >= 0; iCol--) {
+	COUT("column = " << tableReader.colName(iCol));
+
+	if(tableReader.colName(iCol) == "IF FREQ") {
+	  COUT(tableReader.colDataType(iCol));
+	  std::vector<double> vals = tableReader.getDoubleData(iCol);
+	  for(unsigned i=0; i < vals.size(); i++) {
+	    COUT(vals[i] + freq0);
+	  }
+	}
+
+	if(tableReader.colName(iCol) == "STATION") {
+	  std::vector<string> vals = tableReader.getStringData(iCol);
+	  for(unsigned i=0; i < vals.size(); i++) {
+	    COUT(vals[i]);
+	  }
+	}
+
+	if(tableReader.colName(iCol) == "ANNAME") {
+	  std::vector<string> vals = tableReader.getStringData(iCol);
+	  for(unsigned i=0; i < vals.size(); i++) {
+	    COUT(vals[i]);
+	  }
+	}
+
+	if(tableReader.colName(iCol) == "MNTSTA") {
+	  std::vector<string> vals = tableReader.getStringData(iCol);
+	  for(unsigned i=0; i < vals.size(); i++) {
+	    COUT(vals[i]);
+	  }
+	}
+
+      }
+
+    } catch(...) {
+      stop = true;
+    }
+  }
+
+  FitsUvfReader::Vis vis;
+  reader.readData(0, vis);
+  COUT(vis);
+  //  for(unsigned iGroup=0; iGroup < reader.nGroup(); iGroup++) {
+  //    reader.readData(iGroup, vis);
+  //  }
+
+  std::vector<double> ifs = reader.ifs();
+  COUT("Number of IFs: " << reader.nIf());
+}
+
+/**.......................................................................
+ * Test calculating Chi-squared against simulated data
+ */
+void testSimChisq(std::string& file, double perc)
+{
+  // We want to create a VisDataSet object, then install a model to
+  // generate simulated visibilities.  Then compute visibilities on
+  // the same grid as the 
+
+  VisDataSetUvf vds;
+
+  vds.setupForSimulation(true);
+
+  // Determine what we can from the UVF file
+
+  vds.initializeFromFile(file);
+
+  // Now iterate through the UVF file, reading each group to determine
+  // how many baselines actually belong to each baseline group, and
+  // what the maximum UV radius encountered is.
+
+  vds.countData(file);
+
+  // Here's where we actually read the data
+
+  COUT("Loading data:");
+  vds.loadData(file, perc);
+}

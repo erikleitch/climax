@@ -1,0 +1,49 @@
+\subsection{Integrated Y Estimates}
+
+Given a 3D radial model, we can also compute the spherically integrated Compton-y parameter, $Y_{\it sph}(R)$
+
+\begin{eqnarray}
+Y_{\it sph}(R) &=& {{\sigma_T}\over{m_e c^2}}\integral{R}{0}{P(r)}{V}\\\nonumber
+\label{eq:ysph}
+     &=& {{\sigma_T}\over{m_e c^2}}\integral{R}{0}{P(r) 4\pi r^2}{r}\\\nonumber
+     &=& {{\sigma_T P_0}\over{m_e c^2}}\integral{R}{0}{p(r)4\pi r^2}{r}\\
+     &=& y(0){1\over{D_A\theta_c}}{1\over{I(0)}}\integral{R}{0}{p(r)4\pi r^2}{r}
+\end{eqnarray}
+
+if we substitute $P_e(0)$ from Eq.~\ref{eq:ytop}.  If we make the transformation $x = r/r_c$, to transform to dimensionless coordinates, we have:
+
+\begin{eqnarray}
+Y_{\it sph}(R) &=& y(0){1\over{D_A\theta_cI(0)}}r^3_c\integral{x_R}{0}{p(x)4\pi x^2}{x}\\\nonumber
+               &=& y(0){1\over{D_A\theta_cI(0)}}D^3_A\theta^3_c\integral{x_R}{0}{p(x)4\pi x^2}{x}\\\nonumber
+               &=& y(0)D^2_A\theta^2_c{1\over{I(0)}}\integral{x_R}{0}{p(x)4\pi x^2}{x}\\\nonumber
+\end{eqnarray}
+
+for which we require the cosmology (i.e., $D_A$).
+
+\subsection{Mass estimates}
+
+Similarly, we see that
+
+\begin{eqnarray}
+Y_{\it sph}(R) &=& {{\sigma_T}\over{m_e c^2}}\integral{R}{0}{P_e(r)}{V}\\\nonumber
+     &=& {{\sigma_T}\over{m_e c^2}}\integral{R}{0}{P_e(r) 4\pi r^2}{r}\\\nonumber
+     &=& {{\sigma_T P_e(0)}\over{m_e c^2}}\integral{R}{0}{p(r)4\pi r^2}{r}\\\nonumber
+     &=& {{k_B\sigma_T T_e(0)}\over{m_e c^2}}{1\over{m_p\mu_e}}\integral{R}{0}{n_e(0)m_p\mu_ep(r)4\pi r^2}{r}\\\nonumber
+     &=& {{k_B\sigma_T T_e(0)}\over{m_e c^2}}{1\over{m_p\mu_e}}\Mgas(R)\\\nonumber
+\end{eqnarray}
+
+from which we have
+
+\begin{eqnarray}
+\Mgas(R) &=& m_p\mu_e \left({{m_e c^2}\over{k_B T_e(0)}}\right)\left({{1}\over{\sigma_T}}\right)Y_{\it sph}(R)\\\nonumber
+\end{eqnarray}
+
+or
+
+\begin{eqnarray}
+\Mgas(R) &=& m_p\mu_e {{y(0)}\over{I(0)}}\left({{m_e c^2}\over{k_B T_e(0)}}\right)\left({{D^2_A\theta^2_c}\over{\sigma_T}}\right)\integral{x_R}{0}{p(x)4\pi x^2}{x}
+\label{eq:mgas}
+\end{eqnarray}
+
+for which we require the cosmology (i.e., $D_A$) and the temperature normalization ($T_e(0)$).  Here $\mu_e$ is the mean molecular weight per electron, defined as the ratio of the mean particle mass per electron to the mass of the hydrogen atom.
+

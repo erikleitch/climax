@@ -1,0 +1,58 @@
+//============================================================
+// An example of fitting the mass-normalized A10 pressure model to //
+// short-baseline SZA data
+//============================================================
+
+//------------------------------------------------------------
+// Add the data set
+//------------------------------------------------------------
+
+adddataset name=duvf type=uvf;
+duvf.file = ~eml/projects/climax/climaxTestSuite/A1914.uvf;
+duvf.uvmin = 0;
+duvf.uvmax = 2000;
+
+//------------------------------------------------------------
+// Add the A10 model
+//------------------------------------------------------------
+
+addmodel name=m_cluster type=arnaudmodel;
+
+//------------------------------------------------------------
+// Assign priors and/or values to Arnaud model parameters.
+// 
+// Note that when M500 is specified, Climax will automatically compute
+// the Arnaud pressure normalization from the mass normalization.
+// Since this normalization implies self-similarity, you cannot
+// separately specify thetaCore -- this will be calculated from 
+// M500 -- and Climax will complain if you try
+//------------------------------------------------------------
+
+m_cluster.spectralType = sz;
+m_cluster.normalizationFrequency = 30 GHz;
+
+m_cluster.M500 = 1e14:1e16 Msolar;
+m_cluster.xoff = -60:60";
+m_cluster.yoff = -60:60";
+
+//------------------------------------------------------------
+// To convert from M500 to pressure, the A10 normalization requires
+// that the cosmology be specified.  
+//------------------------------------------------------------
+
+addmodel name=cosmo type=cosmo;
+
+cosmo.z      = 0.168;
+cosmo.H0     = 70 km/s/Mpc;
+cosmo.omegaM = 0.3;
+cosmo.omegaL = 0.7;
+
+//------------------------------------------------------------
+// Directives controlling the run itself
+//------------------------------------------------------------
+
+ntry  = 10000;
+nburn = 3000;
+nbin  = 50;
+
+dev = 1/xs;

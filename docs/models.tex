@@ -1,0 +1,77 @@
+\section{Models}
+\input{szmodels}
+
+\subsection{Problems with the GNFW model}
+\label{sec:ss}
+\input{gnfwproblems}
+
+\subsection{Other Models}
+
+\subsubsection{Image Model}
+
+Generic images can also be used in \climax\ as models, via
+\code{adddataset} with \code{type = image}.  Supported image types,
+and manipulation are as described in \S\ref{sec:imagehandling}.
+
+Image models support only the components common to all 2D models:
+translation (offsets), rotation, and scaling (normalization).  When
+reading in images, you must specify either a background level, or
+provide a region of the image from which it can be estimated.  This
+allows for real data images to be used as models, for which a
+background (i.e., constant offset) would significantly skew any
+goodness-of-fit estimator.  
+
+On read-in, this background will be subtracted from the image, and the
+resulting image normalized to unity at the peak.  When comparing image
+models to radio or xray data, the usual requirements for specifying
+the appropriate normalization apply (i.e., \code{Sradio} or
+\code{Sxray} in appropriate units).  Note that no assumptions are made
+about the source of the image data; for example, if the source is an
+xray surface brightness image, for example, you will probably want to
+apply an appropriate transformation (i.e., \code{trans = sqrt}) to the image
+before using it as an SZ model.
+
+Currently, two operations are supported for evaluating an image model
+at a requested offset, by using the \code{oper} keyword: returning the
+value of the nearest pixel (\code{oper = nearest}), or interpolating
+at the requested point (\code{oper = interpolate}).  For offsets that
+lie outside of a model image, a zero value is returned, and the pixel
+is marked as invalid.  
+
+Invalid pixels will not be used in evaluating the likelihood for
+image-plane models, however note that Fourier-plane datasets cannot
+exclude individual pixels, and the zero values will be incorporated
+into the transform and hence the likelihood evaluation.  You should
+think carefully about what makes sense for your use-case.  Supplying a
+valid image that is large enough to accomodate any offset explored by
+the Markov chain can eliminate this potential problem.
+
+An example of using an \xray-derived image model to fit SZ data is included below:
+
+\begin{myindentpar}{3cm}
+\small
+\begin{verbatim}
+adddataset name=sz type=uvf;
+sz.file=A1914.uvf;
+sz.uvmax = 2000;
+sz.display = true;
+
+addmodel name=im type=image;
+im.file=acisf00542N004_cntr_img2.fits;
+im.npix = 64;
+im.thetaMinErr = 0.04 deg;
+im.display = true;
+im.interactive = true;
+im.trans = sqrt;
+im.sigmasmooth = 20";
+
+im.Sradio = -2000:0 muK;
+im.xoff = -0.01:0.01 deg;
+im.yoff = -0.01:0.01 deg;
+im.rotang = -90:90 deg;
+
+nburn = 3000;
+ntry  = 10000;
+
+\end{verbatim}
+\end{myindentpar}

@@ -1,0 +1,92 @@
+\section{The effect of pixelization on point-source models}
+
+Since \climax\ constructs its models in the image plane, point source
+models are necessarily pixelized with a resolution of $dx$.  Here we
+consider the effect this has on the minimum \math{\chisq}\ achievable in
+\climax.
+
+Consider a source at a true location $x$.  In general, the best-fit
+pixelized model will be for a source located at $x + \delx$, where
+$\delx < \mdx/2$, with Fourier transform 
+
+\begin{equation}
+V_j = Se^{-2\pi i u_j\delx} = S(\cos{2\pi u_j\delx} - \sin{2\pi u_j\delx})
+\end{equation}
+
+The best-fit \math{\chisq}\ will then be:
+
+\begin{eqnarray}\nonumber
+  \chisq = {1\over{2N}}\{&\sum_j&{(R_j - S\cos{2\pi u_j(x + \delx)})^2/\sigma_j^2} + \\\nonumber
+                         &\sum_j&{(I_j + S\sin{2\pi u_j(x + \delx)})^2/\sigma_j^2}\} 
+\end{eqnarray}
+
+Now $R_j = N^R_j + S\cos{2\pi u_j x}$ and $I_j = N^I_j - S\sin{2\pi u_j x}$ so that:
+
+\begin{eqnarray}\nonumber
+  \chisq = {1\over{2N\sigma^2}}\{&\sum_j&{(N^R_j + S\cos{2\pi u_j x} - S\cos{2\pi u_j(x + \delx)})^2} + \\\nonumber
+                                 &\sum_j&{(N^I_j - S\sin{2\pi u_j x} + S\sin{2\pi u_j(x + \delx)})^2}\} 
+\end{eqnarray}
+
+if we take the weights to be equal $\sigma_j \equiv \sigma$.  Ignoring
+cross terms with $N^R_j$ and $N^I_j$, which will average to zero, and
+writing $\cos(x + \delx) = \cos{x}\cos{\delx} - \sin{x}\sin{\delx}$ and 
+$\sin(x + \delx) = \sin{x}\cos{\delx} + \cos{x}\sin{\delx}$, we have:
+
+\begin{eqnarray}\nonumber
+  \chisq = 1 + {S^2\over{2N\sigma^2}}\{&\sum_j&{( cx - cx\,c\delx + sx\,s\delx})^2 + \\\nonumber
+                                     &\sum_j&{(-sx + sx\,c\delx + cx\,s\delx)^2}
+\end{eqnarray}
+
+or 
+
+\begin{eqnarray}\nonumber
+  \chisq = 1 + {\snr^2\over{2N}}\{&\sum_j&{( cx^2 - 2cx^2\,c\delx + 2cx\,sx\,s\delx + cx^2\,c\delx^2 - 2cx\,sx\,c\delx\,s\delx  + sx^2\,s\delx^2}) + \\\nonumber
+                                  &\sum_j&{(sx^2 - 2sx^2\,c\delx - 2sx\,cx\,s\delx + sx^2\,c\delx^2 + 2cx\,sx\,c\delx\,s\delx + cx^2\,s\delx^2)}
+\end{eqnarray}
+
+or 
+
+\begin{equation}
+  \chisq = 1 + {\snr^2\over{N}}\sum_j{(1 - \cos{2\pi u_j\delx})}.
+\end{equation}
+
+Clearly, if $\delx\sim 0$, the sum converges to 1.  In general though, we have in the continuous limit:
+
+\begin{eqnarray}\nonumber
+  \sum_j{(\cos{2\pi u_j\delx})} &\sim& {1\over{\Delta u^\prime}}\int^{u^\prime_{max}}_{u^\prime_{min}}{\cos{u^\prime}du^\prime} \\\nonumber
+  &=& {1\over{\Delta u^\prime}}\{\sin{u^\prime_{max}} - \sin{u^\prime_{min}}\} \\\nonumber
+  &=& {1\over{2\pi\Delta u\delx}}\{\sin{2\pi\delx u_{max}} - \sin{2\pi\delx u_{min}}\}.
+\end{eqnarray}
+
+In the worst-case scenario, 
+
+\begin{eqnarray}\nonumber
+\delx \sim {{\Delta x}\over{2}} = {1\over{4u_{max}}}\\\nonumber
+\Delta u = {1\over{N\Delta x}} = {{2u_{max}}\over{N}}
+\end{eqnarray}
+
+and we have
+
+\begin{eqnarray}\nonumber
+  {1\over{2\pi\Delta u\delx}}\{\sin{2\pi\delx u_{max}} - \sin{2\pi\delx u_{min}}\}
+  &=&  {N\over{\pi}}\{1 - \sin{{\pi\over{2}}{r}}\}
+\end{eqnarray}
+
+where $r = u_{min}/u_{max}$, and 
+
+\begin{eqnarray}\nonumber
+  \chisq &=& 1 + {\snr^2\over{N}}\{N - {N\over{\pi}}\{1 - \sin{{\pi\over{2}}{r}}\}\} \\\nonumber
+         &=& 1 + \snr^2\{1 - {1\over{\pi}}\{1 - \sin{{\pi\over{2}}{r}}\}\},
+\end{eqnarray}
+
+which ranges between $\chisq = 1 + \snr^2$ and $\chisq \simeq 1 + {2\over{3}}\snr^2$, depending on the dynamic range $r$ of the data.
+
+Let's take a typical SZA observation: say we have a 6 hour track,
+split into 40-second integrations, for $n_{vis} = 28 \times 6 \times
+3600/40 \sim 15000$ band-averaged visibilities per frequency channel.
+If the visibility data are binned into a $128\times128 = 16384$ cell
+array, then we have on order one visibility per uv cell.  If the map
+noise is $0.2$~mJy/beam, then the noise on each cell is of order
+$\sigma \sim 0.2 \sqrt{16384} = 26~$mJy.  This means that for a
+$1$~mJy source, the contribution to $\chisq$ will be $(1/26)^2 \sim 1.5e-3$.
+

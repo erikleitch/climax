@@ -1,0 +1,82 @@
+// $Id: ImageAxis.h,v 1.2 2011/01/20 19:40:59 eml Exp $
+
+#ifndef GCP_UTIL_IMAGEAXIS_H
+#define GCP_UTIL_IMAGEAXIS_H
+
+/**
+ * @file Axis.h
+ * 
+ * Tagged: Wed Jun 23 15:11:11 PDT 2010
+ * 
+ * @version: $Revision: 1.2 $, $Date: 2011/01/20 19:40:59 $
+ * 
+ * @author Erik Leitch.
+ */
+#include "gcp/util/Angle.h"
+
+namespace gcp {
+  namespace util {
+
+    class ImageAxis {
+    public:
+
+      enum {
+	AXIS_NONE = 0x0,
+	AXIS_X    = 0x1,
+	AXIS_Y    = 0x2,
+	AXIS_BOTH = AXIS_X | AXIS_Y
+      };
+
+      /**
+       * Constructor.
+       */
+      ImageAxis();
+
+      /**
+       * Destructor.
+       */
+      virtual ~ImageAxis();
+
+      // Set methods
+      
+      virtual void setNpix(unsigned n);
+      virtual void setAngularSize(Angle delta);
+      virtual void setSpatialFrequencyResolution(double inverseRadians);
+      
+      // Check methods
+      
+      bool hasNpix();
+      bool hasAngularSize();
+      
+      // Get methods
+      
+      unsigned getNpix();
+      Angle getAngularSize();
+      Angle getAngularResolution();
+      double getSpatialFrequencyResolution();
+      double getMinimumSpatialFrequency();
+      double getMaximumSpatialFrequency();
+      
+      void setAxisType(unsigned type);
+
+      bool operator==(const ImageAxis& axis);
+      bool operator==(ImageAxis& axis);
+
+    protected:
+
+      Angle size_;
+      unsigned n_;
+      
+      bool sizeIsSpecified_;
+      bool nIsSpecified_;
+
+      unsigned type_;
+
+    }; // End class ImageAxis
+
+  } // End namespace util
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_UTIL_IMAGEAXIS_H

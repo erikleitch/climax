@@ -1,0 +1,62 @@
+\subsubsection{Self-Similar Models --- Theory}
+
+The pressure normalization of SZ models can also be related directly
+to the mass of the cluster, through considerations of self-similarity.
+
+We start from the characteristic temperature for an isothermal sphere
+of mass \mathM500\
+
+\begin{equation}
+k\T500 = \mu m_p {{G \M500}\over{2\R500}}
+\label{eq:t500}
+\end{equation}
+
+where \mathM500\ is given by
+
+\begin{equation}
+\M500 = 500  \rho_c(z) {{4\pi}\over{3}}{\R500}^3
+\label{eq:r500}
+\end{equation}
+
+and
+
+\begin{equation}
+\rho_c(z) = {{3 H(z)^2}\over{8\pi G}}.
+\end{equation}
+
+The characteristic gas density is
+
+\begin{equation}
+\rho_{g,500} = 500 f_B\rho_c(z)
+\end{equation}
+
+and the electron density is
+
+\begin{equation}
+n_{e,500} = {\rho_{g,500}\over{\mu_e m_p}}
+\end{equation}
+
+Putting it all together, we have
+
+\begin{eqnarray}\nonumber
+\P500 = n_{e,500} \times k\T500 &=& {\rho_{g,500}\over{\mu_e m_p}} \times \mu m_p {{G \M500}\over{2\R500}}\\\nonumber
+&=& {{\mu}\over{\mu_e}}\rho_{g,500} \times {{G \M500}\over{2\R500}}\\
+&=& {{\mu}\over{\mu_e}} 500 f_B\rho_c(z) \times {{G \M500}\over{2\R500}}
+\end{eqnarray}
+
+From Eq.\ref{eq:r500} we have 
+
+\begin{equation}
+\R500 = \left({3\over{4\pi}}{\M500\over{500 \rho_c(z)}}\right)^{1/3}
+\end{equation}
+
+whence
+
+\begin{eqnarray}\nonumber
+\P500 &=& {{\mu}\over{\mu_e}} 500 f_B\rho_c(z) \times {{G \M500}\over{2\R500}}\\\nonumber
+      &=& {{\mu}\over{\mu_e}} 500 f_B\rho_c(z) \times {{G\M500}\over{2}} \left({{4\pi}\over{3}}{500\rho_c(z)\over{\M500}}\right)^{1/3}\\\nonumber
+      &=& {{\mu}\over{\mu_e}} f_B G {{3}\over{8\pi}} \left( {{4\pi}\over{3}} 500\rho_c(z) \right)^{4/3}\M500^{2/3}\\\nonumber
+      &=& {{\mu}\over{\mu_e}} f_B G {{3}\over{8\pi}} \left( {{4\pi}\over{3}} 500 {{3 H(z)^2}\over{8\pi G}} \right)^{4/3}\M500^{2/3}\\
+      &=& {{\mu}\over{\mu_e}} f_B {{3}\over{8\pi}} \left( {{500 G^{-1/4} H(z)^2}\over{2}} \right)^{4/3}\M500^{2/3}
+\label{eq:p500}
+\end{eqnarray}

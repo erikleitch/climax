@@ -1,0 +1,70 @@
+\subsubsection{Generalized NFW (GNFW) Model}
+\label{sec:gnfw}
+In the context of the pressure models of \cite{nagai2007}, hereafter N07, the generalized NFW profile is given by
+
+\begin{equation}
+p(x_g) = {p_0\over{(\c500 x_g)^\gamma\left[1 + (c_{\rm 500}x_g)^\alpha\right]^{(\beta-\gamma)/\alpha}}}
+\label{eq:gnfw}
+\end{equation}
+
+where $c_{\rm 500}$ is a dimensionless concentration parameter and $x_g
+= r/R_{\rm 500}$.  
+
+In \climax, the generalized NFW model is implemented as a
+dimensionless shape function that can be used to fit cluster profiles
+in any units:
+
+\begin{equation}
+p(x) = {1\over{x^\gamma\left[1 + x^\alpha\right]^{(\beta-\gamma)/\alpha}}}
+\end{equation}
+
+where $x = r/r_c$.  In the context of the GNFW pressure models,
+therefore, the $r_c$ returned by \climax\ (actually $\theta_c$), is
+equivalent to $r_c = \R500/\c500$.
+
+The generalized NFW model can be used in \climax\ by
+invoking \code{addmodel} with \code{type = gnfwmodel}.
+
+From self-similarity arguments (see \S\ref{sec:ss}), the pressure
+normalization (see Eq~\ref{eq:ytop}) of a cluster can be related to
+its mass via Eq~\ref{eq:arnaud}.  In \climax\, \code{m500} can
+therefore also be used with any GNFW model as the primary variable,
+given a cosmology.
+
+\subsubsection{Nagai07 GNFW Model}
+
+N07 find that a good description of high-$T_X$ \chandra\
+clusters can be fit with a model with $p_0 = 3.3$, $c_{\rm 500} = 1.8$
+and $(\alpha,\beta,\gamma) = (1.3, 4.3, 0.7)$.
+
+This specialization of the GNFW model can be used in \climax\ by
+invoking \code{addmodel} with \code{type = nagai07model}.
+
+\subsubsection{Arnaud GNFW Model}
+
+\cite{arnaud2010}, hereafter A10, determine that $p_0 =
+8.403\,h^{-3/2}_{70}$, $c_{\rm 500} = 1.17$ and $(\alpha,\beta,\gamma)
+= (1.0510, 5.4905, 0.3081)$ yield the best fit to REXCESS clusters.
+
+This specialization of the GNFW model can be used in \climax\ by
+invoking \code{addmodel} with \code{type = arnaudmodel}.
+
+A10 also determine the normalization of the pressure model fits to be
+
+\begin{eqnarray}
+P(r) &=&
+1.65\times10^{-3}h(z)^{8/3}\left[{\M500\over{3\times10^{14}h^{-1}_{70}\Msolar}}\right]^{2/3+\alpha_P+\alpha^\prime_P(x)}\\\nonumber
+&\times& p_{\rm A}(x_g) \,h^2_{70}\,{\rm keV\,cm^{-3}},
+\end{eqnarray}
+
+where $p_{\rm A}(x_g)$ is the GNFW profile with the Arnaud et al fit
+parameters given above, $\alpha_P = 0.12$, and
+
+\begin{equation}
+\alpha^\prime_P(x_g) = 0.1 - (\alpha_P + 0.1){{(x_g/0.5)^3}\over{1 + (x_g/0.5)^3}}
+\end{equation}
+
+The small second-order $x_g$-dependent term represents a departure
+from self-similarity, and also a significant increase in computational
+overhead, and it is presently ignored in \climax.
+

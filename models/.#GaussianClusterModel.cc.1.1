@@ -1,0 +1,56 @@
+#include "gcp/models/GaussianClusterModel.h"
+
+using namespace std;
+using namespace gcp::models;
+using namespace gcp::util;
+
+/**.......................................................................
+ * Constructor.
+ */
+GaussianClusterModel::GaussianClusterModel() :
+  ClusterModel(true, false)
+{
+}
+
+/**.......................................................................
+ * Destructor.
+ */
+GaussianClusterModel::~GaussianClusterModel() {}
+
+void GaussianClusterModel::fillSzImage(Image& image, Frequency& frequency)
+{
+  switch (units_) {
+  case Image::UNITS_Y:
+    image.createGaussianImage(yMax_, sigma_);
+    break;
+  default:
+    image.createGaussianImage(tMax_.microK(), sigma_);
+    break;
+  }
+
+  // Set the units of this data
+
+  image.setUnits(units_);
+}
+
+void GaussianClusterModel::setSigma(Angle sigma)
+{
+  sigma_ = sigma;
+}
+
+void GaussianClusterModel::setFwhm(Angle fwhm)
+{
+  sigma_ = fwhm / sqrt(8*log(2.0));
+}
+
+void GaussianClusterModel::setYMax(double yMax)
+{
+  yMax_  = yMax;
+  units_ = Image::UNITS_Y;
+}
+
+void GaussianClusterModel::setTMax(Temperature tMax)
+{
+  tMax_  = tMax;
+  units_ = Image::UNITS_UK;
+}

@@ -1,0 +1,234 @@
+// $Id: Image.h,v 1.3 2011/01/20 19:40:59 eml Exp $
+
+#ifndef GCP_UTIL_IMAGE_H
+#define GCP_UTIL_IMAGE_H
+
+/**
+ * @file Image.h
+ * 
+ * Tagged: Tue Jun  1 22:32:16 PDT 2010
+ * 
+ * @version: $Revision: 1.3 $, $Date: 2011/01/20 19:40:59 $
+ * 
+ * @author tcsh: Erik Leitch.
+ */
+#include <string>
+#include <valarray>
+#include <vector>
+
+#include "gcp/util/Angle.h"
+#include "gcp/util/Frequency.h"
+#include "gcp/util/Length.h"
+
+#include "gcp/fftutil/ImageAxis.h"
+
+namespace gcp {
+  namespace util {
+
+    class Dft2d;
+
+    class Image {
+    public:
+
+      //------------------------------------------------------------
+      // Possible input units that we know about
+      //------------------------------------------------------------
+      
+      enum Units {
+	UNITS_UNKNOWN,
+	UNITS_JY,
+	UNITS_MJYSR,
+	UNITS_UK,
+	UNITS_K,
+	UNITS_Y
+      };
+
+      enum Param {
+	PARAM_NONE   = 0x0,
+	PARAM_UNITS  = 0x1,
+	PARAM_JYCONV = 0x2,
+      };
+
+
+      struct Axis : public ImageAxis {
+
+	Image* parent_;
+
+	void setNpix(unsigned n);
+	void operator=(ImageAxis& axis);
+	void operator=(const ImageAxis& axis);
+
+      };
+
+      // Constructors
+
+      Image();
+      Image(const Image& image);
+      Image(Image& image);
+      Image(std::vector<float>&, Image::Units units);
+
+      void operator=(const Image& image);
+      void operator=(Image& image);
+      void initialize();
+
+      // Destructor.
+
+      virtual ~Image();
+
+      // Methods of loading data into this image
+      
+      void initializeFromFitsFile(std::string fileName);
+      void initializeFromBinaryImageFile(std::string fileName);
+      void initializeFromArray(double* data, unsigned ndata, Units units=UNITS_UNKNOWN);
+      void initializeFromArray(std::vector<float>& data, Units units=UNITS_UNKNOWN);
+      void initialize(Dft2d& dft);
+      
+      // Methods of internally filling the image
+
+      // Create a delta function image
+
+      void createDeltaFunctionImage(unsigned nx, unsigned ny, float val=1.0, int xval=-1, int yval=-1);
+      void createDeltaFunctionImage(float val=1.0, 
+				    Angle xval=Angle(Angle::Degrees(), 0.0),
+				    Angle yval=Angle(Angle::Degrees(), 0.0));
+
+      void createUniformImage(unsigned nx, unsigned ny, float value=1.0);
+      void createEdgeImage(unsigned nx, unsigned ny);
+
+      void createGaussianImage(unsigned nx, unsigned ny, double sigma);
+      void createGaussianImage(unsigned nx, unsigned ny, double sigmax, double sigmay);
+      void createGaussianImage(double amp, Angle sigma, Angle xOffset=zero_, Angle yOffset=zero_);
+
+      void createSineImage(unsigned nx, unsigned ny, double period, Angle phase);
+      void createCosineImage(unsigned nx, unsigned ny, double period, Angle phase);
+
+      void addSine(double period, Angle phase);      
+      void addCosine(double period, Angle phase);      
+
+      // These routines require that the user have already specified
+      // an image size and npix
+
+      void createGaussianPrimaryBeam(Length& diameter, Frequency& freq);
+      void createUniformAperturePrimaryBeam(Length& diameter, Frequency& freq);
+      static Angle gaussianSigma(Length& length, Frequency& freq);
+
+      // Convolve this image with another
+
+      void convolve(Image& im, bool zeropad=false);
+
+      // Resize this image
+
+      void resize(unsigned nx, unsigned ny);
+
+      // Set the parameters of this image
+
+      void setNativeToJy(double jyconv);
+      void setNativeToJy(Frequency& nu);
+
+      double nativeToJy(Frequency& nu);
+      void convertToJy(Frequency& nu);
+
+      void setUnits(Units units);
+      void setAngularSize(Angle size);
+      void setNpix(unsigned nPix);
+
+      Units getUnits();
+
+      // Return an axis descriptor
+
+      Axis& xAxis();
+      Axis& yAxis();
+
+      // Display this image
+
+      void display();
+
+      void plotRow(unsigned iRow);
+      void plotColumn(unsigned iCol);
+
+      // Return the sum of the pixels in this image
+
+      double sum();
+      double mean();
+      double min();
+      double max();
+      double rms();
+
+      // Scale operators for Image class
+
+      void operator+=(double incr);
+      void operator-=(double decr);
+      void operator*=(double mult);
+      void operator/=(double div);
+      void operator=(double val);
+
+      Image operator+(double incr);
+      Image operator-(double decr);
+      Image operator*(double mult);
+      Image operator/(double div);
+
+      // Image operators for Image class
+
+      void operator-=(Image& image);
+      void operator+=(Image& image);
+      void operator*=(const Image& image);
+      void operator*=(Image& image);
+      void operator/=(Image& image);
+
+      Image operator+(Image& image);
+      Image operator-(Image& image);
+      Image operator*(Image& image);
+      Image operator/(Image& image);
+
+      bool axesAreEquivalent(Image& image);
+
+      std::string unitToString();
+
+      // Zero the image (set all pixel values to zero)
+
+      void zero();
+
+      // Return a reference to the specified pixel
+
+      float& val(unsigned ix, unsigned iy);
+
+      // Return true if this image has been initialized with data
+
+      bool hasData();
+
+    public:
+
+      friend class Dft2d;
+
+      void addParameter(Param param);
+      void checkParameter(Param param);
+      
+      std::valarray<float> data_; // The actual data
+      
+      static const Angle zero_;
+
+      Axis xAxis_;                // Parameters of the x-axis
+      Axis yAxis_;                // Parameters of the y-axis
+
+      Units units_;               // The native units of this image
+      double nativeToJy_;         // A conversion factor from native
+				  // units to Janskys
+      bool hasData_;
+      bool hasUnits_;
+      bool hasNativeToJy_;
+
+      unsigned axes_;
+
+      void resize();
+
+      void updateAxis(unsigned axis);
+      void checkAxes();
+
+    }; // End class Image
+
+  } // End namespace util
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_UTIL_IMAGE_H

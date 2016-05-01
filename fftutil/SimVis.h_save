@@ -1,0 +1,293 @@
+// $Id: SimVis.h,v 1.1.1.1 2010/07/13 17:56:32 eml Exp $
+
+#ifndef GCP_UTIL_SIMVIS_H
+#define GCP_UTIL_SIMVIS_H
+
+/**
+ * @file SimVis.h
+ * 
+ * Tagged: Wed Aug 20 16:24:06 PDT 2008
+ * 
+ * @version: $Revision: 1.1.1.1 $, $Date: 2010/07/13 17:56:32 $
+ * 
+ * @author Erik Leitch.
+ */
+#include "gcp/util/Angle.h"
+#include "gcp/util/Frequency.h"
+
+#include "gcp/fftutil/Image.h"
+#include "gcp/fftutil/Stokes.h"
+
+#include "gcp/fftwc_src/fftw.h"
+#include "gcp/fftwr_src/rfftw.h"
+
+#include <vector>
+
+//#define SIM_DEBUG
+
+namespace gcp {
+  namespace util {
+
+    class SimVis {
+    public:
+
+      /**
+       * Constructor.
+       */
+      SimVis();
+
+      /**
+       * Destructor.
+       */
+      virtual ~SimVis();
+
+      //------------------------------------------------------------
+      // A struct for encapsulating a single image
+      //------------------------------------------------------------
+
+      struct SimImage {
+
+	// Possible input units
+
+	enum Units {
+	  UNITS_JY,
+	  UNITS_UK,
+	  UNITS_Y
+	};
+
+	bool initialized_;        // True when this struct actually
+				  // contains an image
+	std::vector<float> data_; // The actual data
+	Units units_;             // The native units of this image
+	double nativeToJy_;       // A conversion factor from native
+				  // units to Janskys
+	Angle size_;
+
+	// Methods
+
+	SimImage();
+	SimImage(std::vector<float>& data, Units units);
+
+	~SimImage();
+	SimImage(const SimImage& image);
+	SimImage(SimImage& image);
+
+	void initialize(std::vector<float>& data, Units units);
+	void initialize(double* data, unsigned ndata, Units units);
+
+	void operator=(const SimImage& image);
+	void operator=(SimImage& image);
+
+	void setNativeToJy(Frequency& nu, Angle& dx);
+	void setSize(Angle size);
+      };
+
+      //------------------------------------------------------------
+      // A struct for encapsulating all Stokes parameters of an image
+      //------------------------------------------------------------
+
+      struct SimStokesImage {
+
+	// A mask of Stokes parameters present
+
+	unsigned mask_;
+
+	Image I_;
+	Image Q_;
+	Image U_;
+
+	// Methods
+
+	SimStokesImage();
+	virtual ~SimStokesImage();
+
+	Image& getImage(Stokes::Param stokes);
+      };
+
+      //------------------------------------------------------------
+      // Define a container for the transform of an image.
+      //------------------------------------------------------------
+
+      struct FT {
+
+	bool initialized_;           // True when this struct has been
+				     // initialized
+	std::vector<fftw_real> data_;
+	rfftwnd_plan plan_;
+	int n_actual_[2]; // The actual size of the data array
+	int n_data_[2];   // The size of the portion of the array
+                          // occupied by data
+
+	// Methods
+
+	FT();
+	virtual ~FT();
+	void initialize(unsigned nx, unsigned ny);
+
+	std::vector<float> getAbs() {
+	  std::vector<float> data(data_.size());
+
+	  for(unsigned i=0; i < data_.size(); i++) {
+	    data[i] = sqrt(data_[i] * data_[i]);
+	  }
+
+	  return data;
+	}
+
+      };
+
+      // Types of images we will recognize
+
+      enum ImType {
+	SIM_CMB,
+	SIM_FG,
+	SIM_LEAK,
+	SIM_BEAM
+      };
+
+      // Possible error codes returned by observeImage
+
+      enum ErrorCode {
+	ERR_NONE   = 0x0,
+	ERR_INTERP = 0x1
+      };
+
+      //------------------------------------------------------------
+      // Public methods of this class
+      //------------------------------------------------------------      
+
+      // Set up the angular size of the images
+
+      void setImageSize(Angle& size);
+
+      // Set up the number of pixels in the image
+
+      void setImageNpix(unsigned npix);
+
+      // Set up the frequencies for which visibilities will be
+      // generated
+
+      void setFrequencies(std::vector<Frequency>& freqs);
+
+      // Install a CMB image
+
+      void installCmbImage(Image& image, Stokes::Param param);
+
+      // Install a foreground image.  freqIndex must be valid for the
+      // vector of frequencies passed to setFrequencies()
+
+      void installFgImage(Image& image, Stokes::Param stokes, 
+			  unsigned freqIndex=0);
+
+      // Install a leakage mask.  freqIndex must be valid for the
+      // vector of frequencies passed to setFrequencies().  Only
+      // Stokes parameters Q and U are valid for leakage masks, as
+      // leakage is by definition the % leakage of I into these modes.
+
+      void installLeakImage(Image& image, Stokes::Param stokes, 
+			    unsigned freqIndex=0);
+
+      // Install a beam.  freqIndex must be valid for the vector of
+      // frequencies passed to setFrequencies().  Stokes parameter is
+      // assumed to be I for the beam.
+
+      void installBeamImage(Image& image, unsigned freqIndex=0);
+
+      // Calculate visibilities for the passed (u,v) coordinates
+      
+      void calculateVisibilities(std::vector<double> u, std::vector<double> v, 
+				 Stokes::Param stokes, unsigned freqIndex, 
+				 std::vector<double> re, std::vector<double> im); 
+
+      void getAbs(FT& trans, std::vector<float>& avec, 
+		  std::vector<float>& uvec, std::vector<float>& vvec);
+
+    private:
+
+      bool includeOffsetLeakage_;
+      bool treatAsAbsoluteLeakage_;
+
+      static const double CONV_SIG;
+
+      enum {
+	DEF_NONE = 0x0,	
+	DEF_SIZE = 0x1,
+	DEF_NPIX = 0x2,
+	DEF_FREQ = 0x4,
+      };
+
+      //------------------------------------------------------------
+      // Private methods of this class
+      //------------------------------------------------------------      
+
+    public:
+
+      // Observe a particular Stokes parameter of an image
+
+      void observeImage(unsigned freqIndex, FT& ft, Stokes::Param param);
+
+      // Install the requested Stokes image into the FT container
+
+      void installStokesImage(FT& trans, unsigned freqIndex, 
+			      Stokes::Param stokes);
+
+      // Get the visibility corresponding to this (u, v) point, for
+      // the current transformed image
+
+      void getVis(FT& ft, double u, double v, double& re, double& im, 
+		  bool& badvis);
+
+      // Return a pointer to the requested image, or NULL if no such
+      // image exists
+
+      Image* getImage(ImType type, unsigned freqIndex, 
+			 Stokes::Param stokes);
+
+      // Check if a passed image is incompatible with an existing npix
+
+      void checkNpix(Image& image);
+
+      // Check if the passed frequency index is valid
+
+      void checkFrequency(unsigned& freqIndex);
+      void checkFrequency(unsigned& freqIndex, std::vector<SimStokesImage>& vec);
+      void checkRequiredParameters(unsigned freqIndex, Stokes::Param stokes);
+
+      //------------------------------------------------------------
+      // Data Members
+      //------------------------------------------------------------
+
+      unsigned defMask_;
+      unsigned npix_;
+      Angle size_;
+      Angle dx_;
+	
+      std::vector<Frequency> frequencies_;
+
+      // A frequency-independent image of the CMB
+
+      SimStokesImage cmb_;
+
+      // A vector of potentially frequency-dependent foreground images
+
+      std::vector<SimStokesImage> fg_;
+
+      // A vector of potentially frequency-dependent leakage masks
+
+      std::vector<SimStokesImage> leak_;
+
+      // A vector of frequency-dependent beams
+
+      std::vector<SimStokesImage> beam_;
+
+#ifdef SIM_DEBUG
+      void pltrans(FT& trans);
+#endif
+    }; // End class SimVis
+
+  } // End namespace util
+} // End namespace gcp
+
+
+
+#endif // End #ifndef GCP_UTIL_SIMVIS_H

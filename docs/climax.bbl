@@ -1,0 +1,20 @@
+\begin{thebibliography}{4}
+\expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
+
+\bibitem[{{Arnaud} {et~al.}(2010){Arnaud}, {Pratt}, {Piffaretti},
+  {B{\"o}hringer}, {Croston}, \& {Pointecouteau}}]{arnaud2010}
+{Arnaud}, M., {Pratt}, G.~W., {Piffaretti}, R., {B{\"o}hringer}, H., {Croston},
+  J.~H., \& {Pointecouteau}, E. 2010, \aap, 517, A92
+
+\bibitem[{Dunkley {et~al.}(2008)Dunkley, Bucher, Ferreira, Moodley, \&
+  Skordis}]{Dunkley2008}
+Dunkley, J., Bucher, M., Ferreira, P.~G., Moodley, K., \& Skordis, C. 2008, 000
+
+\bibitem[{{H{\"o}gbom}(1974)}]{1974A&AS...15..417H}
+{H{\"o}gbom}, J.~A. 1974, \aaps, 15, 417
+
+\bibitem[{{Nagai} {et~al.}(2007){Nagai}, {Kravtsov}, \&
+  {Vikhlinin}}]{nagai2007}
+{Nagai}, D., {Kravtsov}, A.~V., \& {Vikhlinin}, A. 2007, \apj, 668, 1
+
+\end{thebibliography}

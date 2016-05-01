@@ -1,0 +1,109 @@
+\subsection{Model Selection}
+\label{sec:evidence}
+
+Given a model class $M$ and a vector of model parameters $\theta$, we
+can factor the joint distribution $P(\theta,D|M)$ as:
+
+\begin{equation}
+P(\theta,D|M) = P(\theta|D,M)\, P(D|M) = P(D|\theta,M)\, P(\theta|M),
+\end{equation}
+
+which gives us Bayes' Theorem:
+
+\begin{equation}
+P(\theta|D,M) = {{P(D|\theta,M)\, P(\theta|M)}\over{P(D|M)}}
+\end{equation}
+
+We identify $P(\theta|M)$ as the prior, $P(D|\theta, M)$ as the
+likelihood, and $P(\theta|D,M)$ as the posterior distribution for
+$\theta$, of which the chain is an estimate.
+
+The quantity $P(D|M)$ is known as the {\it evidence}, and can be seen
+to play the role of a normalizing factor:
+
+\begin{equation}
+P(D|M) = \integral{}{}{P(D|\theta,M)\, P(\theta|M)}{\theta}.
+\end{equation}
+
+In the context of parameter fitting, $P(D|M)$ is usually left
+unspecified, as only the ratio of the posterior is used to choose
+between different values of parameters.
+
+When comparing different classes of models, however, the evidence
+plays a central role, as it represents the probability of the data
+given a particular model, marginalized over all possible values of
+that model's parameters $\theta$.
+
+When considering two classes of models, the evidence ratio
+$\mathcal{E}$ is defined as:
+
+\begin{equation}
+{{P(D|M_1)}\over{P(D|M_2)}} = {{\integral{}{}{P(D|\alpha,M_1)\, P(\alpha|M_1)}{\alpha}}\over{\integral{}{}{P(D|\beta, M_2)\, P(\beta|M_2)}{\beta}}}
+\end{equation}
+
+Note that the evidence ratio contains the usual ``goodness of fit''
+criterion in the form of the likelihood $P(D|M)$; i.e.,
+if our two ``hypotheses '' just consist of two sets of parameter
+values $P(\alpha|M_1) = \delta(\alpha_0)$ and
+$P(\beta|M_2) = \delta({\beta_0})$, the we recover the usual
+likelihood ratio:
+
+\begin{equation}
+\mathcal{E} = {{P(D|\alpha_0)}\over{P(D|\beta_0)}}
+\end{equation}
+
+If the hypotheses are more complex, however, the evidence ratio
+retains a dependence on the integral over the priors, something that
+is often referred to as the {\it Ockham factor}; i.e., models are
+penalized if only a small part of the prior parameter range matches
+the data.  If for example, our hypotheses consisted of two different
+priors for the same parameters $\vec{\alpha}$, where the likelihood
+was 1 for $\vec{\alpha} < \vec{\alpha}_{max}$ and 0 everwhere
+else, and where $H_1$ allowed only a fraction $f$ of parameter space
+over which the likelihood was non-zero, while $H_2$ allowed the full
+range of parameter space over which the likelihood was non-zero, then
+
+
+\begin{equation}
+\mathcal{E} = {{\integral{}{}{P(\alpha|M_1)}{\alpha}}\over{\integral{}{}{P(\alpha|M_2)}{\alpha}}} = f,
+\end{equation}
+
+that is, $H_1$ would be disfavored over $H_2$ by that same factor $f$,
+even though both hypotheses contain some range of $\vec{\alpha}$ over
+which the model fits the data equally well.
+
+In the context of Markov chains, one way to estimate the evidence
+proceeds as follows:
+
+\begin{equation}
+P(\theta|D,M)\, P(D|M) = {{P(D|\theta,M)\, P(\theta|M)}}
+\end{equation}
+
+or
+
+\begin{equation}
+P(D|M)\, {{P(\theta|D,M)}\over{P(D|\theta,M)}} = P(\theta|M)
+\end{equation}
+
+whence 
+
+\begin{equation}
+P(D|M)\, \integral{}{}{{{P(\theta|D,M)}\over{P(D|\theta,M)}}}{\theta} = \integral{}{}{P(\theta|M)}{\theta} = 1.
+\end{equation}
+
+The term 
+
+\begin{equation}
+\left<P(D|\theta,M)^{-1}\right> \equiv \integral{}{}{{{P(\theta|D,M)}\over{P(D|\theta,M)}}}{\theta}
+\end{equation}
+
+is just the average of $P(D|\theta,M)^{-1}$ over the posterior.
+In the context of Markov chains, then, the quantity
+
+\begin{equation}
+\hat{Z} \equiv {{1}\over{\left<P(D|\theta,M)^{-1}\right>}},
+\end{equation}
+
+where $\left<P(D|\theta,M)^{-1}\right>$ is the average value of the
+inverse likelihood over the chain, can be taken as an estimate of the
+evidence.
