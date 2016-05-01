@@ -282,9 +282,6 @@ endif
 depend: dependCheck
 ifneq (,$(shell diff Makefile.rules.fileList Makefile.rules.fileList_old))
 	@set -e; [ -s Makefile.rules ] ;
-	@echo 'files are different'
-else
-	@echo 'files are the same'
 endif
 
 #=======================================================================
