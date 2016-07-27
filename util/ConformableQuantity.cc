@@ -33,7 +33,6 @@ void ConformableQuantity::setVal(double val, std::string units)
  */
 void ConformableQuantity::setVal(std::string val)
 {
-  COUT("Inside CQ::setVal with val = '" << val << "'");
   Variate::setVal(val);
 }
 
@@ -134,13 +133,13 @@ void ConformableQuantity::setUnits(std::string units)
   }
 
   if(units.size() == 0 || units[0] == '\0') {
-    ThrowColorError(std::endl << "No unit specified." << std::endl
-		    << "Recognized units are: " << std::endl << std::endl
-		    << getUnitsString(), "red");
+    ThrowSimpleColorError(std::endl << "No unit specified." << std::endl
+                          << "Recognized units are: " << std::endl << std::endl
+                          << getUnitsString(), "red");
   } else {
-    ThrowColorError(std::endl << "Unrecognized unit: '" << units << "'" << std::endl << std::endl
-		    << "Recognized units are: " << std::endl << std::endl
-		    << getUnitsString(), "red");
+    ThrowSimpleColorError(std::endl << "Unrecognized unit: '" << units << "'" << std::endl << std::endl
+                          << "Recognized units are: " << std::endl << std::endl
+                          << getUnitsString(), "red");
   }
 
   return;

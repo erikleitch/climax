@@ -150,7 +150,7 @@ namespace gcp {
       }
 
       virtual void setVal(std::string val) {
-	ThrowColorError("You cannot specify a value (" << val << ") for this variate as a unitless string", "red");
+        ThrowSimpleColorError("You cannot specify a value (" << val << ") for this variate as a unitless string", "red");
       }
 
       virtual void setUnits(std::string units) {

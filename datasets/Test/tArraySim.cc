@@ -84,7 +84,7 @@ void calcChisqFile(std::string fileName)
 
   vds.initializeFromFile(fileName);
   vds.countData(fileName);
-  vds.loadData(fileName, image);
+  vds.loadData(false);
 
   calcChisqModel(vds);
 }
@@ -100,7 +100,7 @@ void calcChisqSim(VisDataSetUvf& vds)
   image.setNpix(256);
   image.setAngularSize(Angle(Angle::Degrees(), 4.0));
 
-  vds.loadData("", image);
+  vds.loadData(false);
 
   calcChisqModel(vds);
 }

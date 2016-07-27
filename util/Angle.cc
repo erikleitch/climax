@@ -161,9 +161,11 @@ void Angle::setVal(double val, std::string units)
  */
 void Angle::setVal(std::string val)
 {
-  setDegrees(val);
-  setUnits("degrees");
-  hasValue_ = true;
+  return ConformableQuantity::setVal(val);
+
+//  setDegrees(val);
+//  setUnits("degrees");
+//  hasValue_ = true;
 }
 
 /**.......................................................................

@@ -112,10 +112,10 @@ VisDataSetMos::~VisDataSetMos() {}
  * loadData() is called on this object.  
  * 
  * The intention is that multiple vis datasets can be defined as part
- * of a VisDataSetMos, via the "fileList" parameter, which can be a
+ * of a VisDataSetMos, via the "file" parameter, which can be a
  * list of filenames.  
  *
- * This class instantiates the datasets as the fileList parameter is
+ * This class instantiates the datasets as the file parameter is
  * specified, so at this point, all of our datasets should exist, but
  * need to be loaded().  Prior to loading, we will also force them to
  * inherit the values of relevant parameters
@@ -169,7 +169,7 @@ void VisDataSetMos::display()
   if(getParameter("cmap", false)->data_.hasValue()) {
     PgUtil::setColormap(getStringVal("cmap"));
   }
-
+  
   display(VisDataSet::ACC_DATA);
 }
 
@@ -687,6 +687,8 @@ gcp::util::DataSet* VisDataSetMos::getDataSet(std::string name)
  */
 void VisDataSetMos::initializeDataSets(std::string fileList)
 {
+    COUT("This = " << this << " initializing datasets from " << fileList << " obs = " << &obs_);
+    
   //------------------------------------------------------------
   // Parse the list of filenames
   //------------------------------------------------------------
@@ -713,6 +715,7 @@ void VisDataSetMos::initializeDataSets(std::string fileList)
     
     if(fileStr.contains("uvf")) {
       dataSet = DataSetManager::addDataSet("uvf", name.str());
+      COUT("Added dataSet " << dataSet << " for " << name.str() << " file = " << fileStr << " obs - :" << &dataSet->obs_);
     } else {
       ThrowColorError("Unable to determine the type of this dataset: " << fileStr, "red");
     }
@@ -784,7 +787,7 @@ void VisDataSetMos::setParameter(std::string name, std::string val, std::string 
   if(nameStr.contains("dataset")) {
     String dataSetName = nameStr.findNextInstanceOf("", false, ".", true, true);
     String parName     = nameStr.remainder();
-
+    COUT("Setting parameter: name");
     DataSet* dataSet = getDataSet(dataSetName.str());
     dataSet->setParameter(parName.str(), val, units);
 
@@ -792,7 +795,15 @@ void VisDataSetMos::setParameter(std::string name, std::string val, std::string 
     initializeDataSets(val);
     gcp::util::ParameterManager::setParameter(name, val, units);
   } else {
-    gcp::util::ParameterManager::setParameter(name, val, units);
+
+      gcp::util::ParameterManager::setParameter(name, val, units);
+
+      for(std::map<std::string, gcp::util::DataSet*>::iterator diter = dataSetMap_.begin();
+        diter != dataSetMap_.end(); diter++) {
+        DataSet* dataSet = diter->second;
+        dataSet->setParameter(name, val, units);
+    }
+
   }
 }
 
@@ -827,6 +838,12 @@ void VisDataSetMos::incrementParameter(std::string name, std::string val, std::s
 
   } else {
     gcp::util::ParameterManager::incrementParameter(name, val, units);
+
+    for(std::map<std::string, gcp::util::DataSet*>::iterator diter = dataSetMap_.begin();
+        diter != dataSetMap_.end(); diter++) {
+        DataSet* dataSet = diter->second;
+        dataSet->incrementParameter(name, val, units);
+    }
   }
 }
 

@@ -105,9 +105,11 @@ namespace gcp {
       void displayIfRequested();
 
       void debugPrint();
-      
-      gcp::util::ParameterDocs docs_;
 
+      virtual void setObsParameter(std::string name, std::string val, std::string units=" ");
+
+      gcp::util::ParameterDocs docs_;
+      
     }; // End class DataSetManager
 
   } // End namespace datasets

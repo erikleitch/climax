@@ -133,6 +133,8 @@ VisDataSet::VisDataSet(gcp::util::ThreadPool* pool)
   setParameter("cleancutoff", "0.0");
 
   dataSetType_ = DataSetType::DATASET_2D | DataSetType::DATASET_RADIO;
+
+  visibilitiesInitialized_ = false;
 }
 
 /**.......................................................................
@@ -140,10 +142,9 @@ VisDataSet::VisDataSet(gcp::util::ThreadPool* pool)
  */
 VisDataSet::~VisDataSet() 
 {
-  for(unsigned i=0; i < datasets_.size(); i++) {
-    delete datasets_[i];
-    datasets_[i] = 0;
-  }
+  // Don't delete datasets_ here!  Because we've added them to
+  // base-class DataSetManager::dataSetMap_, they will be deleted by
+  // the base-class destructor
 }
 
 /**.......................................................................
@@ -867,11 +868,11 @@ void VisDataSet::initializeAndCountDataSingle(std::string fileName)
   //------------------------------------------------------------
   // Now load the data from a file.  
   //------------------------------------------------------------
-
+  
   if(!obsWasSet_) {
     initializeFromFile(file);
     countData(file);
-    
+
     //------------------------------------------------------------
     // Else if obs was set, then we are
     // simulating, and no file has been specified.  In this case, just
@@ -902,7 +903,7 @@ void VisDataSet::initializeAndCountDataMultiple()
   //------------------------------------------------------------
 
   parseParameters();
-
+  
   //------------------------------------------------------------
   // Parse each file and count data
   //------------------------------------------------------------
@@ -926,6 +927,9 @@ void VisDataSet::initializeAndCountDataMultiple()
   // data)
   //------------------------------------------------------------
 
+  if(fileList_.size() == 0)
+      ThrowSimpleColorError("No files have been specified.  Use " << name_ << ".file = fileName","red");
+  
   for(unsigned i=0; i < fileList_.size(); i++) {
 
     VisDataSet* dataset = datasets_[i];
@@ -936,7 +940,9 @@ void VisDataSet::initializeAndCountDataMultiple()
     //------------------------------------------------------------
 
     dataset->copyParameters(this, exc, false);
+
     dataset->initializeCommonParameters();
+    
     dataset->initializeAndCountDataSingle(fileList_[i]);
 
     //------------------------------------------------------------
@@ -1512,7 +1518,7 @@ void VisDataSet::determineUniqueBaselineGroupings(ObsInfo& obs)
   for(unsigned i=0; i < obs.antennas_.size(); i++) {
     checkAntenna(obs.antennas_[i], uniqueAnts);
   }
-  
+
   //------------------------------------------------------------
   // Now we have unique tag IDs.  Maximum number of unique baseline
   // groupings will be (number of unique antenna types choose 2) +
@@ -1872,8 +1878,15 @@ void VisDataSet::guessAtAntennaType()
  */
 void VisDataSet::printFileStats(std::string fileName)
 {
+  unsigned lineWidth = XtermManip::getNCol()-2;
+
   std::ostringstream os;
-  os << std::endl << "UVF File " << fileName << " contains observations of: " << std::endl << std::endl
+  os << std::endl;
+  for(unsigned i=0; i < lineWidth; i++)
+    os << "-";
+  os << std::endl;
+    
+  os << "File " << fileName << " contains observations of: " << std::endl << std::endl
     
      << "  Object     = " << obs_.getSourceName() << std::endl
      << "  RA         = " << " " << obs_.getObsRa()      << std::endl
@@ -2606,6 +2619,8 @@ void VisDataSet::initializeVisibilityArrays(double percentCorrelation)
   }
 
   initializeGlobalGridders(max);
+
+  visibilitiesInitialized_ = true;
 }
 
 /**.......................................................................
@@ -2687,6 +2702,8 @@ void VisDataSet::initializeVisibilityArrays2(double percentCorrelation)
   max.initializeForVis(maxSize, maxSize, maxNpix, maxNpix);
 
   initializeGlobalGridders(&max);
+
+  visibilitiesInitialized_ = true;
 }
 
 /**.......................................................................
@@ -2831,6 +2848,8 @@ void VisDataSet::initializeVisibilityArrays(Image& image)
   }
 
   initializeGlobalGridders(max);
+
+  visibilitiesInitialized_ = true;
 }
 
 /**.......................................................................
@@ -5500,19 +5519,19 @@ void VisDataSet::initializePositionDependentData()
   if(!dec_.hasValue_ && obs_.obsDec_.hasValue_)
     setDec(obs_.obsDec_);
 
-  if(hasAbsolutePosition_) {
+  if(hasAbsolutePosition_ && visibilitiesInitialized_) {
 
     //------------------------------------------------------------
     // And now that the position has been set, set it in all of our
     // model components as well.
     //------------------------------------------------------------
-    
+      
     for(unsigned iGroup=0; iGroup < baselineGroups_.size(); iGroup++) {
       VisBaselineGroup& groupData = baselineGroups_[iGroup];
-      
+
       for(unsigned iStokes=0; iStokes < groupData.stokesData_.size(); iStokes++) {
 	VisStokesData& stokesData = groupData.stokesData_[iStokes];
-	
+
 	for(unsigned iFreq=0; iFreq < stokesData.freqData_.size(); iFreq++) {
 	  VisFreqData& freqData = stokesData.freqData_[iFreq];
 
@@ -5653,6 +5672,7 @@ void VisDataSet::initializeIncludedAntennaTypes(std::string includedTypes)
     }
 
     Antenna::AntennaType type = Antenna::getType(typeStr.str());
+
     includedAntTypes_[type] = type;
   }
 }
@@ -6736,6 +6756,7 @@ void VisDataSet::setParameter(std::string name, std::string val, std::string uni
   if(name == "file") {
     fileList_.push_back(val);
     addDataSet(val);
+    return ParameterManager::setParameter(name, val, units);
   }
 
   //------------------------------------------------------------
@@ -6750,11 +6771,11 @@ void VisDataSet::setParameter(std::string name, std::string val, std::string uni
     dataSet->setParameter(parName.str(), val, units);
 
     //------------------------------------------------------------
-    // Else set our parameter
+    // Else call the underlaying DataSetManager setParameter method
     //------------------------------------------------------------
 
   } else {
-    gcp::util::ParameterManager::setParameter(name, val, units);
+    DataSetManager::setParameter(name, val, units);
   }
 }
 
@@ -6769,9 +6790,12 @@ void VisDataSet::incrementParameter(std::string name, std::string val, std::stri
   // If incrementing the file list, add a new dataset
   //------------------------------------------------------------
 
+  COUT("Inside " << this << "setParameter with name = '" << name << "'");
+
   if(name == "file") {
     fileList_.push_back(val);
     addDataSet(val);
+    ParameterManager::incrementParameter(name, val, units);
   }
 
   //------------------------------------------------------------
@@ -6790,7 +6814,7 @@ void VisDataSet::incrementParameter(std::string name, std::string val, std::stri
     //------------------------------------------------------------
 
   } else {
-    gcp::util::ParameterManager::incrementParameter(name, val, units);
+    DataSetManager::incrementParameter(name, val, units);
   }
 }
 

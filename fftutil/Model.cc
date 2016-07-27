@@ -3076,7 +3076,7 @@ void Model::initializeCosmology(gcp::models::CosmologyModel* cosmoModel)
 gcp::models::CosmologyModel* Model::getCosmology()
 {
   if(!cosmoModel_)
-    ThrowSimpleColorError("No cosmology has been specified", "red");
+    ThrowSimpleColorError("No cosmology has been specified.  Use addmodel with type=cosmo", "red");
 
   cosmoModel_->isUsed_ = true;
   return cosmoModel_;
@@ -3192,7 +3192,7 @@ void Model::checkRequiredVariates()
     Variate* var = componentVec_[iVar];
     
     if(var->isRequired() && !var->isDerived_ && !var->isPrerequisite_ && !var->wasSpecified_) 
-      ThrowColorError("Variate " << var->name_ << " is required but has not been specified", "red");
+      ThrowSimpleColorError("Variate " << var->name_ << " is required but has not been specified", "red");
   }
 }
 

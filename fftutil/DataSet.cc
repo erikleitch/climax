@@ -14,7 +14,8 @@ DataSet::DataSet()
 {
   dataSetType_ = DataSetType::DATASET_UNKNOWN;
   obsWasSet_   = false;
-
+  excludeAll_  = false;
+  
   addParameter("file",        DataType::STRING, "The input file for this dataset");
   addParameter("relativex",   DataType::BOOL,   "For 1D datasets, set to 'true' to subtract the first x-value on readin");
   addParameter("display",     DataType::BOOL,   "Set to 'true' to display this dataset on readin");
@@ -81,8 +82,23 @@ bool DataSet::applies(Model& model)
 
 bool DataSet::applies(Model* model)
 {
-  return ((model->dataSetType_ & dataSetType_) == dataSetType_) && 
-    (excludedModels_.find(model) == excludedModels_.end());
+  // If this model is the wrong type for this dataset, return false
+  
+  if((model->dataSetType_ & dataSetType_) == dataSetType_) {
+
+    // Else if models are explicitly included, return true if this
+    // model is included.
+    //
+    // Else return true only if this model is not in the excluded map
+
+    if(includedModels_.size() > 0)
+        return includedModels_.find(model) != includedModels_.end();
+    else
+        return excludedModels_.find(model) == excludedModels_.end();
+
+  } else {
+    return false;
+  }
 }
 
 std::string& DataSet::name()
@@ -119,10 +135,26 @@ void DataSet::writeCompositeModelToFile(std::string file, double sigma)
   ThrowError("No writeCompositeModelToFile() method has been defined for this inheritor");
 }
 
-void DataSet::exclude(Model* model)
+void DataSet::exclude(Model* model, String* name)
 {
-  COUTCOLOR("Excluding model: " << model->name_ << " from dataset " << name_, "green");
+  if(name) {
+    COUTCOLOR("Excluding model: " << model->name_ << " from dataset " << *name, "green");
+  } else {
+    COUTCOLOR("Excluding model: " << model->name_ << " from dataset " << name_, "green");
+  }
+  
   excludedModels_[model] = model->name_;
+}
+
+void DataSet::include(Model* model, String* name)
+{
+  if(name) {
+    COUTCOLOR("Including model: " << model->name_ << " in dataset " << *name, "green");
+  } else {
+    COUTCOLOR("Including model: " << model->name_ << " in dataset " << name_, "green");
+  }
+    
+  includedModels_[model] = model->name_;
 }
 
 void DataSet::displayIfRequested()
@@ -192,12 +224,12 @@ void DataSet::checkPosition(bool override)
       ra_.setHours(getStringVal("ra"));
       hasAbsolutePosition_ = true;
     }
-    
+
     if(getParameter("dec", false)->data_.hasValue()) {
       dec_.setDegrees(getStringVal("dec"));
       hasAbsolutePosition_ = true;
     }
-    
+
     positionChecked_ = true;
     initializePositionDependentData();
   }
@@ -265,4 +297,9 @@ void DataSet::initializeCommonParameters()
   if(getParameter("interactive", false)->data_.hasValue()) {
     interactive_ = getBoolVal("interactive");
   }
+}
+
+void DataSet::setObsParameter(std::string name, std::string val, std::string units)
+{
+    obs_.setParameter(name, val, units);
 }

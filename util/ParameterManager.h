@@ -112,11 +112,17 @@ namespace gcp {
 			     std::ostringstream& filler, std::vector<std::string>& lines,
 			     unsigned lineWidth, bool atLineBreak);
 
-      // Copy parameters from another parameter manager.  
-      // If all == true, any parameter not excluded will be copied
+      // Copy parameters from another parameter manager.
+      //
+      // If all == true,   any parameter not excluded will be copied
       // If all == false, only unspecified parameters will be copied
+      //
+      // We make this virtual so that inheritors that include other
+      // ParameterManager objects can, in principle, copy those
+      // parameters too when this method is called
 
-      void copyParameters(ParameterManager* pm, std::map<std::string, std::string>& excludedParameters, bool all);
+      virtual void copyParameters(ParameterManager* pm, std::map<std::string, std::string>& excludedParameters, bool all);
+      virtual void setParameters(ParameterManager* pm, std::map<std::string, std::string>& excludedParameters, bool all);
 
       // Return true if this name matches any parameter (minimum matching allowed)
 

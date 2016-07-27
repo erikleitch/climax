@@ -77,6 +77,7 @@ int Program::main()
   //testReplacePtSrc(file, perc);
   //  testReplaceGauss(file, perc);
   //testReplaceGaussMultiThread(file, perc, nthread);
+  return 0;
 }
 
 /**.......................................................................
@@ -347,7 +348,7 @@ void testChisqCalcPtSrc(std::string& file, double perc)
   image.xAxis().setNpix(256);
   image.yAxis().setNpix(256);
 
-  vds.loadData(file, image);
+  vds.loadData(false);
 
   // Now calculate primary beams
 
@@ -622,7 +623,7 @@ void testSimulator(std::string& file, double perc)
   // Here's where we actually read the data
 
   COUT("Loading data:");
-  vds.loadData(file, perc);
+  vds.loadData(false);
 
 #if 1
   COUT("About to write UVF file");
@@ -749,7 +750,7 @@ void testReplacePtSrc(std::string& file, double perc)
 
   // Here's where we actually read the data
 
-  vds.loadData(file, image);
+  vds.loadData(false);
 
   //------------------------------------------------------------
   // Now replace internally stored visibilities with simulated ones
@@ -782,7 +783,7 @@ void testReplacePtSrc(std::string& file, double perc)
   // vis, 'load' the data again as if reading from an external file,
   // to grid the simulated visibilities
 
-  vds.loadData(file, image);
+  vds.loadData(false);
 
   // Now re-calculate primary beams to the size that the gridded data
   // will support
@@ -862,7 +863,7 @@ void testReplaceGauss(std::string& file, double perc)
   // Here's where we actually read the data
 
   COUT("Here 3");
-  vds.loadData(file, perc);
+  vds.loadData(false);
 
   // Now replace internally stored visibilities with simulated ones
 
@@ -900,7 +901,7 @@ void testReplaceGauss(std::string& file, double perc)
   // Now that we have internally replaced visibilities with simulated
   // vis, 'load' the data again as if reading from an external file
 
-  vds.loadData(file, perc);
+  vds.loadData(false);
 
   // Now re-calculate primary beams to the size that the gridded data
   // will support
@@ -984,7 +985,7 @@ void testReplaceGaussMultiThread(std::string& file, double perc, unsigned nthrea
   // Here's where we actually read the data
 
   COUT("Here 2");
-  vds.loadData(file, perc);
+  vds.loadData(false);
 
   // Now replace internally stored visibilities with simulated ones
 
@@ -1110,7 +1111,7 @@ void testReplaceGaussMultiThread(std::string& file, double perc, unsigned nthrea
   // Now that we have internally replaced visibilities with simulated
   // vis, 'load' the data again as if reading from an external file
 
-  vds.loadData(file, perc);
+  vds.loadData(false);
 
   // Now re-calculate primary beams to the size that the gridded data
   // will support
@@ -1306,12 +1307,12 @@ void testSimChisq(std::string& file, double perc)
   // Here's where we actually read the data
 
   COUT("Loading data:");
-  vds.loadData(file, perc);
+  vds.loadData(false);
 }
 
 void testInit(std::string file)
 {
   VisDataSetUvf uvf;
   uvf.setParameter("file", file);
-  uvf.loadDataMultiple(false);
+  uvf.loadDataMultiple();
 }

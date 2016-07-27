@@ -80,7 +80,7 @@ void VisDataSetUvf::initializeAntennaInformation(std::string fileName)
 	// up manually
 	//------------------------------------------------------------
 
-	if(obs_.antennas_.size() == 0) {
+        if(obs_.antennas_.size() == 0) {
 
 	  std::ostringstream os;
 	  os << tableReader.nRow();
@@ -335,6 +335,9 @@ void VisDataSetUvf::addDataSet(std::string file)
   name << "dataset" << iDataSet;
 
   dataset->setName(name.str());
+
+  dataSetMap_[name.str()] = dataset;
+  COUT(this << " Calling addDataSet with dataset = " << dataset << " map size = " << dataSetMap_.size() << " file = " << file);
 
   //------------------------------------------------------------
   // Add a 'parameter' corresponding to this dataset, so it appears

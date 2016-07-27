@@ -89,11 +89,11 @@ void Generic2DAngularModel::initialize()
   addComponentName(rotationAngle_,          "rotang",                 "A rotation angle for this model");
   addComponentName(normalization_,          "norm",                   "A normalization for the model");
   addComponentName(normalization_,          "normalization",          "A normalization for the model.  If fitting to a generic dataset, "
-		                                                      "you will be required to specify this.");
+                   "you will be required to specify this.");
   addComponentName(radioNormalization_,     "Sradio",                 "A radio normalization for the model.  If fitting to a radio dataset, "
-		                                                      "you will be required to specify this.");
+                   "you will be required to specify this.");
   addComponentName(xrayNormalization_,      "Sxray",                  "An xray normalization for the model.  If fitting to an xray dataset, "
-		                                                      "you will be required to specify this.");
+                   "you will be required to specify this.");
   addComponentName(spectralType_,           "spectralType",           "The spectral type of this model ('none', 'alpha', or 'sz')");
   addComponentName(spectralIndex_,          "spectralIndex",          "The spectral index, if spectralType = alpha");
   addComponentName(normalizationFrequency_, "normalizationFrequency", "The frequency at which the normalization applies");
@@ -533,8 +533,8 @@ void Generic2DAngularModel::fillImageSingleThread(unsigned type, Image& image, v
       image.data_[iy * nx + ix] = prefactor * envelope(type, xpp, ypp);
 
 #ifdef TIMER_TEST
-  fit4.stop();
-  ft4 += fit4.deltaInSeconds();
+      fit4.stop();
+      ft4 += fit4.deltaInSeconds();
 #endif
     }
   }
@@ -760,7 +760,7 @@ void Generic2DAngularModel::fillArraySingleThread(unsigned type, Angle& axisUnit
 /**.......................................................................
  * Multi-threaded method used to fill part of an array with this model
  */
- void Generic2DAngularModel::fillArrayMultiThread(ExecData* ed)
+void Generic2DAngularModel::fillArrayMultiThread(ExecData* ed)
 {
   //------------------------------------------------------------
   // Now iterate over all pixels for this thread
@@ -800,7 +800,7 @@ EXECUTE_FN(Generic2DAngularModel::execFillArrayMultiThread)
  */
 void Generic2DAngularModel::fillUvData(unsigned type, gcp::util::UvDataGridder& gridder, void* params)
 {
-  ThrowColorError("No inherited fillUvData() method has been defined by this model", "red");
+  ThrowSimpleColorError("No inherited fillUvData() method has been defined by this model", "red");
 }
 
 /**.......................................................................
@@ -825,7 +825,7 @@ void Generic2DAngularModel::setNormalization(double norm)
   if(normalization_.unitlessAllowed()) {
     normalization_.value() = norm;
   } else {
-    ThrowColorError("You cannot specify the normalization without units: " << normalization_.getUnitsString(), "red");
+    ThrowSimpleColorError("You cannot specify the normalization without units: " << normalization_.getUnitsString(), "red");
   }
 }
 
@@ -1011,10 +1011,10 @@ double Generic2DAngularModel::getSzEnvelopePrefactor(Frequency* freq)
   if(units == "comptony") {
     return radioNormalization_.value();
 
-  //------------------------------------------------------------
-  // If units are already in pressure, there is also no frequency
-  // dependence (simple scaling from Y to pressure)
-  //------------------------------------------------------------
+    //------------------------------------------------------------
+    // If units are already in pressure, there is also no frequency
+    // dependence (simple scaling from Y to pressure)
+    //------------------------------------------------------------
 
   } else if(units == "keV/cm^3" || units == "erg/cm^3") {
 
@@ -1074,10 +1074,10 @@ double Generic2DAngularModel::getItohEnvelopePrefactor(Frequency* freq)
   if(units == "comptony") {
     return radioNormalization_.value();
 
-  //------------------------------------------------------------
-  // If units are already in pressure, there is also no frequency
-  // dependence (simple scaling from Y to pressure)
-  //------------------------------------------------------------
+    //------------------------------------------------------------
+    // If units are already in pressure, there is also no frequency
+    // dependence (simple scaling from Y to pressure)
+    //------------------------------------------------------------
 
   } else if(units == "keV/cm^3" || units == "erg/cm^3") {
 
@@ -1141,11 +1141,11 @@ void Generic2DAngularModel::checkNormalizationSetup()
 	 getVar("Sradio")->wasSpecified_ ||
 	 getVar("Sxray")->wasSpecified_)) {
       
-      ThrowColorError(std::endl << "At least one of the following normalizations must be specified: " 
-		      << std::endl << std::endl
-		      << "  " << name_ << ".normalization" << std::endl
-		      << "  " << name_ << ".Sradio"        << std::endl
-		      << "  " << name_ << ".Sxray"         << std::endl, "red");
+      ThrowSimpleColorError(std::endl << "At least one of the following normalizations must be specified: " 
+                            << std::endl << std::endl
+                            << "  " << name_ << ".normalization" << std::endl
+                            << "  " << name_ << ".Sradio"        << std::endl
+                            << "  " << name_ << ".Sxray"         << std::endl, "red");
     }
   }
 
@@ -1164,14 +1164,14 @@ void Generic2DAngularModel::checkNormalizationSetup()
       image.setUnits(Unit::stringToUnits(radioNormalization_.units()));
       double fac = image.nativeToJy(freq, beam);
     } catch(...) {
-      ThrowColorError(std::endl << "You must specify one of the following units for " << name_ << ".Sradio: " 
-		      << std::endl << std::endl
-		      << "      muK   MicroKelvin"      << std::endl
-		      << "       mK   MilliKelvin"      << std::endl
-		      << "        K   Kelvin"           << std::endl
-		      << " comptony   Compton Y"        << std::endl
-		      << "    Jy/sr   Jansky/steradian" << std::endl
-		      << "   MJy/sr   MegaJansky/steradian" << std::endl, "red");
+      ThrowSimpleColorError(std::endl << "You must specify one of the following units for " << name_ << ".Sradio: " 
+                            << std::endl << std::endl
+                            << "      muK   MicroKelvin"      << std::endl
+                            << "       mK   MilliKelvin"      << std::endl
+                            << "        K   Kelvin"           << std::endl
+                            << " comptony   Compton Y"        << std::endl
+                            << "    Jy/sr   Jansky/steradian" << std::endl
+                            << "   MJy/sr   MegaJansky/steradian" << std::endl, "red");
     }
   }
 }
@@ -1182,7 +1182,7 @@ void Generic2DAngularModel::checkNormalizationSetup()
 void Generic2DAngularModel::checkSpectralSetup()
 {
   if(getVar("normalizationFrequency")->isVariable()) {
-    ThrowColorError("'" << name_ << ".normalizationFrequency' cannot be variable", "red");
+    ThrowSimpleColorError("'" << name_ << ".normalizationFrequency' cannot be variable", "red");
   }
 
   //------------------------------------------------------------
@@ -1218,13 +1218,13 @@ void Generic2DAngularModel::checkSpectralSetup()
 		                // case
 
     if(getVar("spectralIndex")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified a spectral index for model '" << name_ 
-		      << "', but no spectral type.", "red");
+      ThrowSimpleColorError(std::endl << "You have specified a spectral index for model '" << name_ 
+                            << "', but no spectral type.", "red");
     }
 
     if(getVar("normalizationFrequency")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified a normalization frequency for model '" << name_ 
-		      << "', but no spectral type.", "red");
+      ThrowSimpleColorError(std::endl << "You have specified a normalization frequency for model '" << name_ 
+                            << "', but no spectral type.", "red");
     }
 
     break;
@@ -1237,13 +1237,13 @@ void Generic2DAngularModel::checkSpectralSetup()
           	                 // sense.
 
     if(!getVar("spectralIndex")->hasValue_ && !getVar("spectralIndex")->isVariable()) {
-      ThrowColorError(std::endl << "You have specified 'alpha' for the spectrum of model '" 
-		      << name_ << "', but no spectral index", "red");
+      ThrowSimpleColorError(std::endl << "You have specified 'alpha' for the spectrum of model '" 
+                            << name_ << "', but no spectral index", "red");
     }
 
     if(!getVar("normalizationFrequency")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified a spectral type for model '" << name_ 
-		      << "', but no normalization frequency", "red");
+      ThrowSimpleColorError(std::endl << "You have specified a spectral type for model '" << name_ 
+                            << "', but no normalization frequency", "red");
     }
 
     break;
@@ -1256,13 +1256,13 @@ void Generic2DAngularModel::checkSpectralSetup()
                                  // sense.
 
     if(getVar("spectralIndex")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified 'sz' for the spectrum of model '" 
-		      << name_ << "', and also a spectral index", "red");
+      ThrowSimpleColorError(std::endl << "You have specified 'sz' for the spectrum of model '" 
+                            << name_ << "', and also a spectral index", "red");
     }
 
     if(!getVar("normalizationFrequency")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified a spectral type for model '" << name_ 
-		      << "', but no normalization frequency", "red");
+      ThrowSimpleColorError(std::endl << "You have specified a spectral type for model '" << name_ 
+                            << "', but no normalization frequency", "red");
     }
 
     break;
@@ -1275,23 +1275,23 @@ void Generic2DAngularModel::checkSpectralSetup()
                                  // doesn't make sense.
 
     if(getVar("spectralIndex")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified 'sz' for the spectrum of model '" 
-		      << name_ << "', and also a spectral index", "red");
+      ThrowSimpleColorError(std::endl << "You have specified 'sz' for the spectrum of model '" 
+                            << name_ << "', and also a spectral index", "red");
     }
 
     if(!getVar("normalizationFrequency")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified a spectral type for model '" << name_ 
-		      << "', but no normalization frequency", "red");
+      ThrowSimpleColorError(std::endl << "You have specified a spectral type for model '" << name_ 
+                            << "', but no normalization frequency", "red");
     }
 
     if(getVar("spectralIndex")->hasValue_) {
-      ThrowColorError(std::endl << "You have specified 'sz' for the spectrum of model '" 
-		      << name_ << "', and also a spectral index", "red");
+      ThrowSimpleColorError(std::endl << "You have specified 'sz' for the spectrum of model '" 
+                            << name_ << "', and also a spectral index", "red");
     }
 
     if(!getParameter("electronTemperature", false)->data_.hasValue()) {
-      ThrowColorError(std::endl << "You have specified the relativistic 'itoh' expansion for the spectrum of model '" 
-		      << name_ << "', but no electron temperature (use '" << name_ << ".electronTemperature')", "red");
+      ThrowSimpleColorError(std::endl << "You have specified the relativistic 'itoh' expansion for the spectrum of model '" 
+                            << name_ << "', but no electron temperature (use '" << name_ << ".electronTemperature')", "red");
     }
 
     electronTemperature_.setVal(getDoubleVal("electronTemperature"), getParameter("electronTemperature", true)->units_);

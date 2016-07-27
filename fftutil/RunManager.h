@@ -66,7 +66,7 @@ namespace gcp {
       void parseVariableAssignment(String& line, String& tok, String& val);
       void parseVariableAssignmentNew(String& str, String& tok, String& valStr);
 
-      void parseObsVariableAssignment(ObsInfo* obs, String& varName, String& valStr);
+      void parseObsVariableAssignment(DataSet* dataSet, ObsInfo* obs, String& varName, String& valStr);
       void parseCosmoVariableAssignment(Cosmology* cosmo, String& varName, String& valStr);
       void parseDataSetVariableAssignment(DataSet* dataSet, String& varName, String& valStr);
       void parseDataSetObsVariableAssignment(DataSet* dataSet, String& varName, String& valStr);
@@ -105,6 +105,7 @@ namespace gcp {
       void getComputeChisqArgs(String& line);
       void getDisplayDataSetsArgs(String& line);
       void getWriteDataSetsArgs(String& line);
+      void getIncludeArgs(String& line);
       void getExcludeArgs(String& line);
       void getLoadDataArgs(String& line);
 

@@ -224,13 +224,13 @@ void GnfwModel::checkSetup()
   if(m500_.wasSpecified_ && !m500_.isDerived_) {
 
     if(radioNormalization_.wasSpecified_ && !radioNormalization_.isDerived_) {
-      ThrowColorError(std::endl << "You can't specify both " << name_ << ".M500 and " << name_ 
-		      << ".Sradio, but must specify one or the other", "red");
+      ThrowSimpleColorError(std::endl << "You can't specify both " << name_ << ".M500 and " << name_ 
+                            << ".Sradio, but must specify one or the other", "red");
     }
 
     if(thetaCore_.wasSpecified_ && !thetaCore_.isDerived_) {
-      ThrowColorError(std::endl << "If " << name_ << ".M500 is specified, you cannot also specify " 
-		      << name_ << ".thetaCore, since it will be derived from " << name_  << ".M500",
+      ThrowSimpleColorError(std::endl << "If " << name_ << ".M500 is specified, you cannot also specify " 
+                            << name_ << ".thetaCore, since it will be derived from " << name_  << ".M500",
 		      "red");
     }
 
@@ -285,8 +285,8 @@ void GnfwModel::checkSetup()
   } else if(radioNormalization_.wasSpecified_ && !radioNormalization_.isDerived_) {
 
     if(m500_.wasSpecified_ && !m500_.isDerived_) {
-      ThrowColorError(std::endl << "You can't specify both " << name_ << ".M500 and " << name_ 
-		      << ".Sradio, but must specify one or the other", "red");
+      ThrowSimpleColorError(std::endl << "You can't specify both " << name_ << ".M500 and " << name_ 
+                            << ".Sradio, but must specify one or the other", "red");
     }
 
     radioNormalization_.isDerived_ = false;

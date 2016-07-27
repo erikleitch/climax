@@ -11,6 +11,7 @@ adddataset name=duvf type=uvf;
 duvf.file = ~eml/projects/climax/climaxTestSuite/A1914.uvf;
 duvf.uvmin = 0;
 duvf.uvmax = 2000;
+duvf.display = true;
 
 //------------------------------------------------------------
 // Add the A10 model

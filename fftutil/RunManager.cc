@@ -666,7 +666,6 @@ void RunManager::processLine(String& line)
     getObsName(line, name);
     checkIfNameAlreadyExists(name);
 
-    COUT("Adding obs by name '" << name << "'");
     ObsInfo* obs = om_.addObs(name);
 
     //------------------------------------------------------------
@@ -782,11 +781,11 @@ void RunManager::processLine(String& line)
     updateMethod_ = getStrippedVal(line).toInt();
 
     //------------------------------------------------------------
-    // Include line
+    // Include directive line
     //------------------------------------------------------------
     
-  } else if(line.contains("include") && !line.contains("includeifs")) {
-    
+  } else if(line.contains("include") && !line.contains("includeifs") && !line.contains("include(")) {
+
     // Skip the include token
     
     line.findNextString();
@@ -798,7 +797,20 @@ void RunManager::processLine(String& line)
     processFile(fileName.str(), false);
       
     //------------------------------------------------------------
-    // Exclude line
+    // Include model line
+    //------------------------------------------------------------
+    
+  } else if(line.contains("include(")) {
+      
+    if(!datasetsInitialized_) {
+      datasetDependentLines_.push_back(line.str());
+      return;
+    } else {
+      getIncludeArgs(line);
+    }
+
+    //------------------------------------------------------------
+    // Exclude model line
     //------------------------------------------------------------
     
   } else if(line.contains("exclude") && !line.contains("excludeants") && !line.contains("excludeifs")) {
@@ -992,7 +1004,7 @@ void RunManager::processLine(String& line)
       } else if(line.contains("+=")) {
 	parseVariableIncrement(tok, val);
       } else {
-	parseVariableAssignmentNew(line, tok, val);
+          parseVariableAssignmentNew(line, tok, val);
       }
 	
     } else if(line.contains("help")) {
@@ -1029,8 +1041,8 @@ void RunManager::preProcessLine(String& line)
   // Include line
   //------------------------------------------------------------
     
-  if(line.contains("include") && !line.contains("includeifs")) {
-    
+  if(line.contains("include") && !line.contains("includeifs") && !line.contains("include(")) {
+
     // Skip the include token
     
     line.findNextString();
@@ -1127,7 +1139,9 @@ void RunManager::getModelArgs(String& line, String& name, String& type, String& 
       } else if(tok.str() == "discard") {
 	discard = val;
       } else {
-	ThrowError("Unrecognized token: " << tok);
+	ThrowSimpleColorError(std::endl << "Unrecognized token: " << tok << std::endl << std::endl
+                              << "Use like: 'addmodel name=nameStr type=typeStr'" << std::endl << std::endl
+                              << "While parsing line: '" << line << "'", "red");
       }
     }
   } while(!nt.isEmpty());
@@ -1157,9 +1171,9 @@ void RunManager::getDataSetNameAndType(String& line, std::string& name, std::str
       } else if(tok.str() == "type") {
 	type = val.str();
       } else {
-	ThrowColorError(std::endl << "Unrecognized token: " << tok << std::endl << std::endl
-			<< "Use like: 'adddataset name=nameStr type=typeStr'" << std::endl << std::endl
-			<< "While parsing line: '" << line << "'", "red");
+	ThrowSimpleColorError(std::endl << "Unrecognized token: " << tok << std::endl << std::endl
+                              << "Use like: 'adddataset name=nameStr type=typeStr'" << std::endl << std::endl
+                              << "While parsing line: '" << line << "'", "red");
       }
     }
   } while(!nt.isEmpty());
@@ -1699,7 +1713,7 @@ void RunManager::parseVariableAssignment(String& str, String& tok, String& valSt
   }
 
   if(obs)
-    return parseObsVariableAssignment(obs, varName, valStr);
+    return parseObsVariableAssignment(0, obs, varName, valStr);
 
   ThrowColorError(std::endl << "No model or dataset matches the name: '" << ownerName << "'", "red");
 }
@@ -1799,7 +1813,7 @@ void RunManager::parseVariableAssignmentNew(String& str, String& tok, String& va
       //------------------------------------------------------------
 
     } else {
-      return parseObsVariableAssignment(obs, varName, valStr);
+      return parseObsVariableAssignment(dataSet, obs, varName, valStr);
     }
   }
 
@@ -1817,7 +1831,7 @@ void RunManager::parseVariableAssignmentNew(String& str, String& tok, String& va
 /**.......................................................................
  * Parse an assignment to obs parameters
  */
-void RunManager::parseObsVariableAssignment(ObsInfo* obs, String& varName, String& valStr)
+void RunManager::parseObsVariableAssignment(DataSet* dataSet, ObsInfo* obs, String& varName, String& valStr)
 {
   // Next parse the expression
 
@@ -1830,10 +1844,17 @@ void RunManager::parseObsVariableAssignment(ObsInfo* obs, String& varName, Strin
     String numStr  = valStr.findNextNumericString(":,.");
     String unitStr = valStr.remainder();
 
-    obs->setParameter(varName.str(), numStr.str(), unitStr.str());
+    if(dataSet)
+      dataSet->setObsParameter(varName.str(), numStr.str(), unitStr.str());
+    else
+      obs->setParameter(varName.str(), numStr.str(), unitStr.str());
 
   } else {
-    obs->setParameter(varName.str(), valStr.str());
+
+    if(dataSet)
+      dataSet->setObsParameter(varName.str(), valStr.str());
+    else
+      obs->setParameter(varName.str(), valStr.str());
   }
 
 }
@@ -1868,7 +1889,8 @@ void RunManager::parseDataSetObsVariableAssignment(DataSet* dataSet, String& var
   parseVarname(varName, ownerName, parName, aspectName);
 
   ObsInfo& obs = dataSet->getObs();
-  parseObsVariableAssignment(&obs, parName, valStr);
+
+  parseObsVariableAssignment(dataSet, &obs, parName, valStr);
 }
 
 void RunManager::parseModelCosmoVariableAssignment(Model* model, String& varName, String& valStr)
@@ -3978,6 +4000,26 @@ unsigned RunManager::getChainLength()
 /**.......................................................................
  * Process a line of the form:
  *
+ * dataset.include(model);
+ */
+void RunManager::getIncludeArgs(String& line)
+{
+  line.strip(' ');
+  String dataSetStr = line.findNextInstanceOf("", false, ".include", true, true);
+  String modelStr   = line.findNextInstanceOf("(", true, ")", true, true);
+
+  DataSet* dataSet = 0;
+  Model* model = 0;
+
+  dataSet = dm_.getDataSet(dataSetStr.str());
+  model   = mm_.getModel(modelStr.str());
+
+  dataSet->include(model, &dataSetStr);
+}
+
+/**.......................................................................
+ * Process a line of the form:
+ *
  * dataset.exclude(model);
  */
 void RunManager::getExcludeArgs(String& line)
@@ -3992,7 +4034,7 @@ void RunManager::getExcludeArgs(String& line)
   dataSet = dm_.getDataSet(dataSetStr.str());
   model   = mm_.getModel(modelStr.str());
 
-  dataSet->exclude(model);
+  dataSet->exclude(model, &dataSetStr);
 }
 
 /**.......................................................................

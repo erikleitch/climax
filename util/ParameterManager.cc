@@ -640,6 +640,36 @@ void ParameterManager::copyParameters(ParameterManager* pm, std::map<std::string
 }
 
 /**.......................................................................
+ * Set parameter values from another parameter manager
+ */ 
+void ParameterManager::setParameters(ParameterManager* pm, std::map<std::string, std::string>& excludedParameters, bool all)
+{
+  //------------------------------------------------------------
+  // Iterate over the other manager's list of parameters
+  //------------------------------------------------------------
+
+  for(unsigned i=0; i < pm->parameterVec_.size(); i++) {
+    Parameter* par = pm->parameterVec_[i];
+    std::string name = pm->reverseParameterMap_[par];
+    
+    COUT("PM: setParameters pm = " << pm << " this = " << this << " name = " << name);
+    //------------------------------------------------------------
+    // If this parameter is found in our map, set its value
+    //------------------------------------------------------------
+
+    std::ostringstream os;
+    if((parameterMap_.find(name) != parameterMap_.end()) && (excludedParameters.find(name) == excludedParameters.end())) {
+        if(par->data_.hasValue()) {
+            Parameter* ourPar = getParameter(name);
+            os.str("");
+            os << par->data_;
+            setParameter(name, os.str(), par->units_);
+        }
+    }
+  }
+}
+
+/**.......................................................................
  * Return true if this name matches any parameter (minimum matching allowed)
  */
 bool ParameterManager::matches(std::string name)

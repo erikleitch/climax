@@ -978,6 +978,8 @@ namespace gcp {
       gcp::util::Angle synthBeamMinSig_;
       gcp::util::Angle synthBeamRotAngle_;
 
+      bool visibilitiesInitialized_;
+      
     public:
 
       gcp::util::Angle xShift_;

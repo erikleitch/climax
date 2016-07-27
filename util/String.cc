@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <pwd.h>
 #include <cmath>
 
@@ -587,8 +588,6 @@ bool String::isValidPowerExpression()
 
     String base  = copy.findNextInstanceOf(" ", false, "^", true, false);
 
-    COUT("base = " << base);
-
     if(base.isEmpty())
       return false;
 
@@ -1092,18 +1091,20 @@ bool String::expandTildeIter()
       i2 = iter;
       ii1 = i;
     } else if(i1 != str_.end()) {
-
+      
       if(isalnum(*iter)) {
 	i2 = iter;
 	os << *iter;
 	ii2 = i;
       } else {
-
+        
+        COUT("os(1) = '" << os.str() << "'");
+        
 	if(os.str() == "")
 	  os << getlogin();
 
-
-	COUT("(1) Calling expand and replace on os = '" << os.str() << "'" << " i1 = " << ii1 << " i2 = " << ii2);
+        COUT("os(2) = '" << os.str() << "'");
+        
 	expandAndReplace(os, i1, i2);
 	return true;
       }
@@ -1119,8 +1120,6 @@ bool String::expandTildeIter()
     if(os.str() == "")
       os << getlogin();
     
-    COUT("(2) Calling expand and replace on os = '" << os.str() << "'");
-    
     expandAndReplace(os, i1, i2);
     return true;
   } else {
@@ -1131,16 +1130,13 @@ bool String::expandTildeIter()
 void String::expandAndReplace(std::ostringstream& os, std::string::iterator& i1, std::string::iterator& i2) 
 {
   struct passwd* pw = getpwnam(os.str().c_str());
+
+  COUT("Getting pw struct for " << os.str() << " dir = '" << pw->pw_dir << "'");
   
   if(!pw) 
     ThrowSysError("getpwnam");
   
   std::string expanded(pw->pw_dir);
-
-  //  COUT("Replacing " << i1 << " to " << i2+1 << " with '" << expanded << "'");
-
-  if(i1 == str_.begin() && i2 == str_.begin())
-    COUT("Start of string is being replaced");
 
   str_.replace(i1, i2+1, expanded);
 }
@@ -1213,8 +1209,6 @@ std::vector<double> String::parseRange()
     do {
       nextVal = findNextStringSeparatedByChars(",", true);
       
-      COUT("nextVal = " << nextVal << " empty = " << nextVal.isEmpty());
-
       if(!nextVal.isEmpty()) {
 	std::vector<double> newVals = parseRangeToken(nextVal);
 
@@ -1232,8 +1226,6 @@ std::vector<double> String::parseRangeToken(String& tok)
 {
   std::vector<double> vec;
 
-  COUT("Inside prt with tok = " << tok);
-
   //------------------------------------------------------------
   // Is this a range, of the form 16-23, or 16-18:2 ?
   //------------------------------------------------------------
@@ -1242,9 +1234,6 @@ std::vector<double> String::parseRangeToken(String& tok)
     String startStr = tok.findNextInstanceOf("", false, "-", true, true);
     String stopStr;
     double deltaVal = 1.0;
-
-    COUT("start = " << startStr);
-    COUT("remainder = " << tok.remainder());
 
     // If the remainder contains a ':', then this is a delta
 
@@ -1256,8 +1245,6 @@ std::vector<double> String::parseRangeToken(String& tok)
 
     } else {
       stopStr  = tok.remainder();
-      COUT("stop = " << stopStr);
-
     }
 
     double startVal = startStr.toDouble();
@@ -1267,7 +1254,6 @@ std::vector<double> String::parseRangeToken(String& tok)
       ThrowError("Invalid range: " << tok);
 
     unsigned nVal = (unsigned)((stopVal - startVal)/deltaVal + 1);
-    COUT("nVal = " << nVal);
     vec.resize(nVal);
 
     for(unsigned iVal=0; iVal < nVal; iVal++) {

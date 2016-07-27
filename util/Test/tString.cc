@@ -26,7 +26,18 @@ void Program::initializeUsage() {};
 
 int Program::main()
 {
-  String tStr("-max");
+  String uname("~/this/is/a/test/~eml");
+
+  uname.expandTilde();
+
+  COUT("uname is now: " << uname);
+  COUT("Getloging returns: " << getlogin());
+  return 0;
+}
+
+int oldTests(Program* prog)
+{
+    String tStr("-max");
 
   COUT((tStr == "-max"));
   return 0;
@@ -74,23 +85,21 @@ int Program::main()
 
   return 0;
 
-  tStr = Program::getStringParameter("str");
   std::vector<double> vals = tStr.parseRange();
   for(unsigned i=0; i < vals.size(); i++) {
     COUT("val = " << vals[i]);
   }
   return 0;
 
-  tStr = Program::getStringParameter("str");
-  COUT("str = '" << tStr.getNextNchars(Program::getIntegerParameter("n")));
+  COUT("str = '" << tStr.getNextNchars(prog->getIntegerParameter("n")));
   return 0;
 
-  tStr = Program::getStringParameter("str");
+  tStr = prog->getStringParameter("str");
   COUT("tStr = " << tStr);
   COUT("nnn = '" << tStr.findNextNonNumericString() << "'");
   return 0;
 
-  COUT(String::formatHumanReadableInteger(Program::getIntegerParameter("val")));
+  COUT(String::formatHumanReadableInteger(prog->getIntegerParameter("val")));
   return 0;
 
   String testStr3("10^-5");

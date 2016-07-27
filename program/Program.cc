@@ -516,9 +516,10 @@ bool Program::getBooleanParameter (string key)
   string sp = getStringParameter(key);
   size_t nt = yes.find(sp[0]);
   size_t nf = no.find(sp[0]);
-  
-  if (nt > 0 && nt < yes.length()) return true;
-  if (nf > 0 && nf < yes.length()) return false;
+
+  if (nt < yes.length()) return true;
+  if (nf < no.length()) return false;
+
   cerr << "Syntax error for boolean flag " << key << "=" << sp << endl;
   cerr << "Expecting one of " << yes << " or " << no << endl;
   exit(1);

@@ -224,7 +224,7 @@ void DataSetManager::remModel(ModelManager& mm)
 
       if(dataSet->applies(*model)) {
 	if(model->remove_) {
-	  dataSet->addModel(model);
+            dataSet->addModel(model);
 	}
       }
     }
@@ -493,7 +493,7 @@ void DataSetManager::checkPosition(bool override)
   for(std::map<std::string, gcp::util::DataSet*>::iterator diter = dataSetMap_.begin();
       diter != dataSetMap_.end(); diter++) {
     DataSet* dataSet = diter->second;
-    
+
     dataSet->checkPosition(override);
   }
 }
@@ -506,5 +506,16 @@ void DataSetManager::debugPrint()
     
     dataSet->debugPrint();
   }
+}
+
+void DataSetManager::setObsParameter(std::string name, std::string val, std::string units)
+{
+    obs_.setParameter(name, val, units);
+
+    for(std::map<std::string, gcp::util::DataSet*>::iterator diter = dataSetMap_.begin();
+        diter != dataSetMap_.end(); diter++) {
+        DataSet* dataSet = diter->second;
+        dataSet->setObsParameter(name, val, units);
+    }
 }
 

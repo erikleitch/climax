@@ -61,7 +61,9 @@ namespace gcp {
       virtual void addModel(Model& model)=0;
 
       void addModel(Model* model);
-      void exclude(Model* model);
+
+      void exclude(Model* model, String* name=0);
+      void include(Model* model, String* name=0);
 
       //------------------------------------------------------------
       // Remove the current composite model from this dataset
@@ -135,6 +137,8 @@ namespace gcp {
 
       void initializeCommonParameters();
 
+      virtual void setObsParameter(std::string name, std::string val, std::string units=" ");
+
     public:
 
       bool positionWasSpecified();
@@ -160,7 +164,18 @@ namespace gcp {
 
       std::string fileName_;
 
+      //------------------------------------------------------------
+      // Maintain a map of models excluded from this dataset
+      //------------------------------------------------------------
+      
       std::map<Model*, std::string> excludedModels_;
+      bool excludeAll_;
+      
+      //------------------------------------------------------------
+      // Maintain a map of models included from this dataset
+      //------------------------------------------------------------
+
+      std::map<Model*, std::string> includedModels_;
 
       //------------------------------------------------------------
       // An absolute position
