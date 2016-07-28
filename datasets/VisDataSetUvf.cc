@@ -337,7 +337,6 @@ void VisDataSetUvf::addDataSet(std::string file)
   dataset->setName(name.str());
 
   dataSetMap_[name.str()] = dataset;
-  COUT(this << " Calling addDataSet with dataset = " << dataset << " map size = " << dataSetMap_.size() << " file = " << file);
 
   //------------------------------------------------------------
   // Add a 'parameter' corresponding to this dataset, so it appears

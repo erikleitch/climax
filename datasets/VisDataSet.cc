@@ -408,8 +408,10 @@ void VisDataSet::countData(std::string fileName)
 	  goodVis &= (uvMin_ < 0.0 || data.r_ > uvMin_);
 	  goodVis &= (uvMax_ < 0.0 || data.r_ < uvMax_);
 
+          #if 0
 	  if(debug_)
 	    COUT("Counting " << baselineGroupIndex << " iif = " << iIf << " re = " << data.re_ << " im = " << data.im_ << " wt = " << data.wt_ << " u = " << data.u_ << " v = " << data.v_ << " goodVis = " << goodVis << " baseline = " << vis.baseline_);
+          #endif
 
 
 	  if(goodVis) {
@@ -550,7 +552,7 @@ void VisDataSet::loadDataMultiple()
     VisDataSet* dataset = datasets_[i];
 
     //------------------------------------------------------------
-    // Accumulate data for this dataset into our gridders
+    // Accumulate data for the child dataset into _our_ gridders
     //------------------------------------------------------------
 
     dataset->accumulateMoments(fileList_[i], true, true, *this, VisDataSet::dispatchExternal);
@@ -868,8 +870,9 @@ void VisDataSet::initializeAndCountDataSingle(std::string fileName)
   //------------------------------------------------------------
   // Now load the data from a file.  
   //------------------------------------------------------------
-  
+
   if(!obsWasSet_) {
+
     initializeFromFile(file);
     countData(file);
 
@@ -942,7 +945,7 @@ void VisDataSet::initializeAndCountDataMultiple()
     dataset->copyParameters(this, exc, false);
 
     dataset->initializeCommonParameters();
-    
+
     dataset->initializeAndCountDataSingle(fileList_[i]);
 
     //------------------------------------------------------------
@@ -1583,7 +1586,7 @@ void VisDataSet::determineUniqueBaselineGroupings(ObsInfo& obs)
 
   std::ostringstream osBase;
   getBaseOs(osBase);
-  COUTCOLOR(osBase.str(), "cyan");
+  COUTCOLOR(osBase.str() << std::endl, "cyan");
 
   //------------------------------------------------------------
   // Now that we have the association between baseline tag and
@@ -1886,7 +1889,7 @@ void VisDataSet::printFileStats(std::string fileName)
     os << "-";
   os << std::endl;
     
-  os << "File " << fileName << " contains observations of: " << std::endl << std::endl
+  os << name_ << " File " << fileName << " contains observations of: " << std::endl << std::endl
     
      << "  Object     = " << obs_.getSourceName() << std::endl
      << "  RA         = " << " " << obs_.getObsRa()      << std::endl
@@ -3013,7 +3016,7 @@ void VisDataSet::computePrimaryBeamMultiThread(VisFreqData& vfd, Antenna& ant1, 
 
     for(unsigned i=0; i < vfd.wtSums_.size(); i++) {
 
-      //      COUT(" size = " << vfd.wtSums_.size() << " iGroup = " << iGroup << " freq = " << vfd.frequency_.GHz() << " wt = " << vfd.wtSums_[i] << " pb has data " << vfd.primaryBeam_.hasData());
+//      COUT(" size = " << vfd.wtSums_.size() << " iGroup = " << iGroup << " freq = " << vfd.frequency_.GHz() << " wt = " << vfd.wtSums_[i] << " pb has data " << vfd.primaryBeam_.hasData() << " xshift = " << vfd.xShifts_[i] << " yshift = " << vfd.yShifts_[i]);
 
       if(!vfd.primaryBeam_.hasData()) {
 
@@ -3032,7 +3035,7 @@ void VisDataSet::computePrimaryBeamMultiThread(VisFreqData& vfd, Antenna& ant1, 
 	double wtPrev = wtSumTotal;
 
 	pbCurr  = ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
-	pbCurr *= ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
+	pbCurr *= ant2.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
 
 	pbPrev *= wtPrev;
 	pbCurr *= wtCurr;
@@ -3077,10 +3080,13 @@ EXECUTE_FN(VisDataSet::execComputePrimaryBeam)
   double wtSumTotal = 0;
 
   for(unsigned i=0; i < vfd->wtSums_.size(); i++) {
-    if(i==0) {
-      vfd->primaryBeam_  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-      vfd->primaryBeam_ *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-      wtSumTotal = vfd->wtSums_[i];
+    if(!vfd->primaryBeam_.hasData()) {
+      if(vfd->wtSums_[i] > 0.0) {
+        vfd->primaryBeam_  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+        vfd->primaryBeam_ *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+        wtSumTotal = vfd->wtSums_[i];
+      }
+      
     } else {
       Image pbPrev = vfd->primaryBeam_;
       Image pbCurr;
@@ -3089,7 +3095,7 @@ EXECUTE_FN(VisDataSet::execComputePrimaryBeam)
       double wtPrev = wtSumTotal;
       
       pbCurr  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-      pbCurr *= ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+      pbCurr *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
       
       pbPrev *= wtPrev;
       pbCurr *= wtCurr;
@@ -6789,8 +6795,6 @@ void VisDataSet::incrementParameter(std::string name, std::string val, std::stri
   //------------------------------------------------------------
   // If incrementing the file list, add a new dataset
   //------------------------------------------------------------
-
-  COUT("Inside " << this << "setParameter with name = '" << name << "'");
 
   if(name == "file") {
     fileList_.push_back(val);

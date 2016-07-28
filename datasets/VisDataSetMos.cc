@@ -687,8 +687,6 @@ gcp::util::DataSet* VisDataSetMos::getDataSet(std::string name)
  */
 void VisDataSetMos::initializeDataSets(std::string fileList)
 {
-    COUT("This = " << this << " initializing datasets from " << fileList << " obs = " << &obs_);
-    
   //------------------------------------------------------------
   // Parse the list of filenames
   //------------------------------------------------------------
@@ -715,7 +713,6 @@ void VisDataSetMos::initializeDataSets(std::string fileList)
     
     if(fileStr.contains("uvf")) {
       dataSet = DataSetManager::addDataSet("uvf", name.str());
-      COUT("Added dataSet " << dataSet << " for " << name.str() << " file = " << fileStr << " obs - :" << &dataSet->obs_);
     } else {
       ThrowColorError("Unable to determine the type of this dataset: " << fileStr, "red");
     }
