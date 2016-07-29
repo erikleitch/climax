@@ -107,6 +107,13 @@ namespace gcp {
 	return (unsigned)((((arad * degPerRad_ - degs)*60 - mins)*60 - secs) * 1000);
       }
 
+      void setVal(std::string val)
+      {
+          setDegrees(val);
+          setUnits("degrees");
+          hasValue_ = true;
+      }
+
     private:
 
       static const double arcSecPerRad_;

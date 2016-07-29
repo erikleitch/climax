@@ -358,13 +358,13 @@ double Cosmology::evaluateLightTravelDistanceKernel(double z, void* params)
 /**.......................................................................
  * Method to set a parameter for this object
  */
-void Cosmology::setParameter(std::string name, std::string val, std::string units)
+void Cosmology::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
   // Always call the underlying PM method:
   
-  ParameterManager::setParameter(name, val, units);
+  ParameterManager::setParameter(name, val, units, external);
   
   if(name == "H0") {
     H0_.setVal(getDoubleVal("H0"), getParameter("H0", true)->units_);

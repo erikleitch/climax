@@ -3349,13 +3349,13 @@ void Model::fillMultiplicity(unsigned** dPtr)
     (*dPtr)[i] = nTimesAtThisPoint_[i];
 }
 
-void Model::setParameter(std::string name, std::string val, std::string units)
+void Model::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   //------------------------------------------------------------
   // Always call the underlying PM method:
   //------------------------------------------------------------
 
-  ParameterManager::setParameter(name, val, units);
+    ParameterManager::setParameter(name, val, units, external);
 
   if(name == "multiplicative") {
     if(getBoolVal("multiplicative")) {

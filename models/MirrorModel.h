@@ -36,7 +36,7 @@ namespace gcp {
 
       void setNumberOfReferencePoints(unsigned n);
       void setNumberOfFiducialPoints(unsigned n);
-      void setParameter(std::string name, std::string val, std::string units);
+      void setParameter(std::string name, std::string val, std::string units, bool external=true);
 
       void fillArray(unsigned type, gcp::util::Angle& axisUnits, 
 		     std::valarray<double>& x, std::valarray<double>& y, 

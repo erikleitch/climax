@@ -42,7 +42,7 @@ namespace gcp {
 
       bool shapeParametersAreFixed();
       void checkSetup();
-      void setParameter(std::string name, std::string val, std::string units);
+      void setParameter(std::string name, std::string val, std::string units, bool external=true);
       void setNumberOfSegments(unsigned n);
       double profileFn(double x, double alpha, double beta);
 

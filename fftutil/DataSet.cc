@@ -260,10 +260,10 @@ void DataSet::setPositionIfSpecified()
  * Set the position information, both internally, and as parameters
  * that can be accessed through the parsing interface
  */
-void DataSet::setRa(gcp::util::HourAngle& ra)
+void DataSet::setRa(gcp::util::HourAngle& ra, bool descend)
 {
   ra_ = ra;
-  setParameter("ra", ra_.doubleToSexagesimal(ra_.hours()), "");
+  setParameter("ra", ra_.doubleToSexagesimal(ra_.hours()), "", descend);
   hasAbsolutePosition_ = true;
 }
 
@@ -271,10 +271,10 @@ void DataSet::setRa(gcp::util::HourAngle& ra)
  * Set the position information, both internally, and as parameters
  * that can be accessed through the parsing interface
  */
-void DataSet::setDec(gcp::util::Declination& dec)
+void DataSet::setDec(gcp::util::Declination& dec, bool external)
 {
   dec_ = dec;
-  setParameter("dec", dec_.doubleToSexagesimal(dec_.degrees()), "");
+  setParameter("dec", dec_.doubleToSexagesimal(dec_.degrees()), "", external);
   hasAbsolutePosition_ = true;
 }
 

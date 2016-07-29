@@ -88,7 +88,7 @@ namespace gcp {
       Density criticalDensity();
       Density criticalDensity(double z);
 
-      void setParameter(std::string name, std::string val, std::string units=" ");
+      void setParameter(std::string name, std::string val, std::string units=" ", bool external=true);
 
       void checkParameter(std::string par);
       void checkParametersOr(std::string par1, std::string par2);

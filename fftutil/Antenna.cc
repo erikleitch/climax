@@ -703,9 +703,9 @@ void Antenna::addParameters()
  * Add a parameter to our map.  If resizable=true, we create a new
  * vector of the specified type.
  */
-void Antenna::setParameter(std::string name, std::string val, std::string units)
+void Antenna::setParameter(std::string name, std::string val, std::string units, bool external)
 {
-  ParameterManager::setParameter(name, val, units);
+  ParameterManager::setParameter(name, val, units, external);
 
   if(name == "diameter") {
     Length diam;

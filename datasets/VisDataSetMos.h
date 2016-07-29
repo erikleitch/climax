@@ -73,8 +73,8 @@ namespace gcp {
       // Overloaded methods from ParameterManager
       //------------------------------------------------------------
 
-      virtual void setParameter(std::string name, std::string val, std::string units=" ");
-      virtual void incrementParameter(std::string name, std::string val, std::string units=" ");
+      virtual void setParameter(std::string name, std::string val, std::string units=" ", bool external=true);
+      virtual void incrementParameter(std::string name, std::string val, std::string units=" ", bool external=true);
 
       gcp::util::DataSet* getDataSet(std::string name);
       std::vector<std::string> getFileList(std::string fileList);

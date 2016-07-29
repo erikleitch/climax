@@ -132,8 +132,8 @@ namespace gcp {
       void insertDisplayModels();
       void removeDisplayModels();
 
-      void setRa(gcp::util::HourAngle& ra);
-      void setDec(gcp::util::Declination& dec);
+      virtual void setRa(gcp::util::HourAngle& ra, bool descend=true);
+      virtual void setDec(gcp::util::Declination& dec, bool descend=true);
 
       void initializeCommonParameters();
 

@@ -999,7 +999,7 @@ void ModelManager::updateCosmology()
     cosmoModel_->update();
 }
 
-void ModelManager::setParameter(std::string name, std::string val, std::string units)
+void ModelManager::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -1007,7 +1007,7 @@ void ModelManager::setParameter(std::string name, std::string val, std::string u
   // Always call the underlying PM method:
   //------------------------------------------------------------
 
-  Model::setParameter(name, val, units);
+  Model::setParameter(name, val, units, external);
 
   //------------------------------------------------------------
   // Now see whose parameter was being set and call its method too, in
@@ -1019,7 +1019,7 @@ void ModelManager::setParameter(std::string name, std::string val, std::string u
   String varName   = nameStr.remainder();
 
   Model* model = getModel(modelName.str());
-  model->setParameter(varName.str(), val, units);
+  model->setParameter(varName.str(), val, units, external);
 
   //------------------------------------------------------------
   // Finally update this model's components, in case setting that

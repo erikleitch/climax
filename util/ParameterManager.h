@@ -98,8 +98,8 @@ namespace gcp {
 
       // Set methods
 
-      virtual void setParameter(std::string name, std::string val, std::string units=" ");
-      virtual void incrementParameter(std::string name, std::string val, std::string units=" ");
+      virtual void setParameter(std::string name, std::string val, std::string units=" ", bool external=true);
+      virtual void incrementParameter(std::string name, std::string val, std::string units=" ", bool external=true);
 
       // Get methods
       

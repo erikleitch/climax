@@ -33,7 +33,7 @@ namespace gcp {
       virtual ~Polynomial1D();
 
       void setNumberOfCoefficients(unsigned n);
-      void setParameter(std::string name, std::string val, std::string units);
+      void setParameter(std::string name, std::string val, std::string units, bool external);
 
       std::vector<gcp::util::VariableUnitQuantity> coeffs_;
 

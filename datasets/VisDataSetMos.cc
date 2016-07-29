@@ -543,18 +543,10 @@ void VisDataSetMos::getMeanPosition(HourAngle& raMean, Declination& decMean)
     ++iDataSet;
   }
 
-  //  raMeanDeg  += ( raCurrDeg -  raMeanDeg) / (iDataSet + 1);
-  //  decMeanDeg += (decCurrDeg - decMeanDeg) / (iDataSet + 1);
-
-  //  COUTCOLOR("XYZ Mean = " << std::endl << xyzMean, "magenta");
   lla = geoid.ecfToGeocentricLla(xyzMean);
-  //  COUTCOLOR("LLA Mean = " << std::endl << lla, "green");
 
   raMean.setDegrees(lla.longitude_.degrees());
   decMean.setDegrees(lla.latitude_.degrees());
-
-  //  COUTCOLOR("RA  Mean = " << raMean, "magenta");
-  //  COUTCOLOR("DEC Mean = " << decMean, "magenta");
 }
 
 /**.......................................................................
@@ -777,37 +769,55 @@ std::vector<std::string> VisDataSetMos::getFileList(std::string fileList)
 /**.......................................................................
  * Set a parameter
  */
-void VisDataSetMos::setParameter(std::string name, std::string val, std::string units)
+void VisDataSetMos::setParameter(std::string name, std::string val, std::string units, bool descend)
 {
   String nameStr(name);
-
+  
+  //------------------------------------------------------------
+  // If this is a request to set a parameter of a dataset that we are
+  // managing, call down to its setParameter method
+  //------------------------------------------------------------
+  
   if(nameStr.contains("dataset")) {
     String dataSetName = nameStr.findNextInstanceOf("", false, ".", true, true);
     String parName     = nameStr.remainder();
-    COUT("Setting parameter: name");
-    DataSet* dataSet = getDataSet(dataSetName.str());
-    dataSet->setParameter(parName.str(), val, units);
 
+    DataSet* dataSet = getDataSet(dataSetName.str());
+    dataSet->setParameter(parName.str(), val, units, descend);
+
+    //------------------------------------------------------------
+    // Else if this is the file keyword, add corresponding datasets
+    //------------------------------------------------------------
+    
   } else if(nameStr.contains("file")) {
     initializeDataSets(val);
-    gcp::util::ParameterManager::setParameter(name, val, units);
+    gcp::util::ParameterManager::setParameter(name, val, units, descend);
+
+    //------------------------------------------------------------
+    // Else set our parameter and the corresponding parameter in all
+    // descendants.  This is to allow setting a parameter once for the
+    // top level without having to separately set the same parameter
+    // for each descendant dataset from the config file interface
+    //------------------------------------------------------------
+    
   } else {
 
-      gcp::util::ParameterManager::setParameter(name, val, units);
+    gcp::util::ParameterManager::setParameter(name, val, units, descend);
 
+    if(descend) {
       for(std::map<std::string, gcp::util::DataSet*>::iterator diter = dataSetMap_.begin();
-        diter != dataSetMap_.end(); diter++) {
+          diter != dataSetMap_.end(); diter++) {
         DataSet* dataSet = diter->second;
-        dataSet->setParameter(name, val, units);
+        dataSet->setParameter(name, val, units, descend);
+      }
     }
-
   }
 }
 
 /**.......................................................................
  * Increment a parameter
  */
-void VisDataSetMos::incrementParameter(std::string name, std::string val, std::string units)
+void VisDataSetMos::incrementParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -816,7 +826,7 @@ void VisDataSetMos::incrementParameter(std::string name, std::string val, std::s
     String parName     = nameStr.remainder();
 
     DataSet* dataSet = getDataSet(dataSetName.str());
-    dataSet->incrementParameter(parName.str(), val, units);
+    dataSet->incrementParameter(parName.str(), val, units, external);
 
     //------------------------------------------------------------
     // If a file list is being incremented, add another dataset to
@@ -825,16 +835,15 @@ void VisDataSetMos::incrementParameter(std::string name, std::string val, std::s
 
   } else if(nameStr.contains("file")) {
     initializeDataSets(val);
-    gcp::util::ParameterManager::incrementParameter(name, val, units);
+    gcp::util::ParameterManager::incrementParameter(name, val, units, external);
 
     //------------------------------------------------------------ 
-    // Else
-    // just call down to the base-class method to increment the
+    // Else just call down to the base-class method to increment the
     // parameter
     //------------------------------------------------------------
 
   } else {
-    gcp::util::ParameterManager::incrementParameter(name, val, units);
+      gcp::util::ParameterManager::incrementParameter(name, val, units, external);
 
     for(std::map<std::string, gcp::util::DataSet*>::iterator diter = dataSetMap_.begin();
         diter != dataSetMap_.end(); diter++) {
@@ -991,25 +1000,31 @@ void VisDataSetMos::checkPosition(bool override)
   getMeanPosition(raMean, decMean);
 
   //------------------------------------------------------------
-  // But don't override the position if it was explicitly set
-  //------------------------------------------------------------
-  
-  if(getParameter("dec", false)->data_.hasValue())
-    decMean = dec_;
-
-  if(getParameter("ra", false)->data_.hasValue())
-    raMean = ra_;
-
-  //------------------------------------------------------------
-  // Finally, set the result as our default position.  For mosaics,
-  // the position of our maps will be recalculated to the center of a
-  // map that is large enough to encompass the extrema of our
-  // datasets, but this mean position will be used as the absolute
+  // Set the result as our default position, but don't override the
+  // position if it was explicitly set.
+  //
+  // Also, if a position was explicitly set, we assume that the user
+  // wants to set the position for all descendant data sets (else what
+  // is the point of changing the mosaic position?), so we set the
+  // explicit value in all datasets managed by this dsm.
+  //
+  // For mosaics, the position of our maps will be recalculated to the
+  // center of a map that is large enough to encompass the extrema of
+  // our datasets, but this mean position will be used as the absolute
   // position for any model component that has not explicitly
   // specified its position, since relative model positions are not
   // defined for a mosaic
   //------------------------------------------------------------
-
-  setRa(raMean);
-  setDec(decMean);
+  
+  if(getParameter("dec", false)->data_.hasValue()) {
+    setDec(dec_, true);
+  } else {
+    setDec(decMean, false);
+  }
+  
+  if(getParameter("ra", false)->data_.hasValue()) {
+    setRa(ra_, true);
+  } else {
+    setRa(raMean, false);
+  }
 }

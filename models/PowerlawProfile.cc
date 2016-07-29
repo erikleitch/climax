@@ -183,7 +183,7 @@ bool PowerlawProfile::shapeParametersAreFixed()
   return true;
 }
 
-void PowerlawProfile::setParameter(std::string name, std::string val, std::string units)
+void PowerlawProfile::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -191,7 +191,7 @@ void PowerlawProfile::setParameter(std::string name, std::string val, std::strin
   // Always call the underlying PM method:
   //------------------------------------------------------------
 
-  ParameterManager::setParameter(name, val, units);
+  ParameterManager::setParameter(name, val, units, external);
 
   if(name == "n") {
     unsigned n = getUintVal("n");

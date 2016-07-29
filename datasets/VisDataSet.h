@@ -830,8 +830,8 @@ namespace gcp {
       virtual void simulateData(double sigma);
       virtual void writeCompositeModelToFile(std::string fileName, double sigma);
 
-      virtual void setParameter(std::string name, std::string val, std::string units=" ");
-      virtual void incrementParameter(std::string name, std::string val, std::string units=" ");
+      virtual void setParameter(std::string name, std::string val, std::string units=" ", bool external=true);
+      virtual void incrementParameter(std::string name, std::string val, std::string units=" ", bool external=true);
       
     protected:
 

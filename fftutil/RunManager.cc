@@ -1923,6 +1923,7 @@ void RunManager::parseDataSetVariableAssignment(DataSet* dataSet, String& varNam
   //------------------------------------------------------------
 
   if(varName == "ra" && valStr.contains(":")) {
+    COUT("Inside RM with dataSet = " << dataSet->name_);
     dataSet->setParameter(varName.str(), valStr.str());
     return;
   } else if(varName == "dec" && valStr.contains(":")) {

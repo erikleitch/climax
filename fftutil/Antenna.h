@@ -189,7 +189,7 @@ namespace gcp {
       //------------------------------------------------------------
 
       void addParameters();
-      void setParameter(std::string name, std::string val, std::string units="");
+      void setParameter(std::string name, std::string val, std::string units="", bool external=true);
 
       //------------------------------------------------------------
       // Internal parameter mask handling

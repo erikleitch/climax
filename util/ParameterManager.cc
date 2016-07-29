@@ -234,7 +234,7 @@ ParameterManager::Parameter* ParameterManager::getParameter(std::string name, bo
 /**.......................................................................
  * Set the value of a parameter
  */
-void ParameterManager::setParameter(std::string name, std::string val, std::string units)
+void ParameterManager::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   Parameter* param = getParameter(name, false);
   DataType& dat = param->data_;
@@ -276,7 +276,7 @@ void ParameterManager::setParameter(std::string name, std::string val, std::stri
 /**.......................................................................
  * Increment the value of a parameter
  */
-void ParameterManager::incrementParameter(std::string name, std::string val, std::string units)
+void ParameterManager::incrementParameter(std::string name, std::string val, std::string units, bool external)
 {
   Parameter* param = getParameter(name, false);
   DataType& dat = param->data_;

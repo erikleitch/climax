@@ -1255,7 +1255,7 @@ void ObsInfo::addParameters()
  * Add a parameter to our map.  If resizable=true, we create a new
  * vector of the specified type.
  */
-void ObsInfo::setParameter(std::string name, std::string val, std::string units)
+void ObsInfo::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -1263,7 +1263,7 @@ void ObsInfo::setParameter(std::string name, std::string val, std::string units)
   // Always call the underlying PM method:
   //------------------------------------------------------------
 
-  ParameterManager::setParameter(name, val, units);
+  ParameterManager::setParameter(name, val, units, external);
 
   //------------------------------------------------------------
   // Special keywords need additional action.  If 'nant' is specified,
@@ -1361,7 +1361,7 @@ void ObsInfo::setParameter(std::string name, std::string val, std::string units)
 
     try {
       unsigned iAnt = antNo.toInt()-1;
-      antennas_[iAnt].setParameter(varName.str(), val, units);
+      antennas_[iAnt].setParameter(varName.str(), val, units, external);
     } catch(...) {
 
       if(antennas_.size() == 0) {
@@ -1369,7 +1369,7 @@ void ObsInfo::setParameter(std::string name, std::string val, std::string units)
       }
 
       for(unsigned iAnt=0; iAnt < antennas_.size(); iAnt++) {
-	antennas_[iAnt].setParameter(varName.str(), val, units);
+          antennas_[iAnt].setParameter(varName.str(), val, units, external);
       }
     }
   }

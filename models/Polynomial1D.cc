@@ -22,7 +22,7 @@ Polynomial1D::Polynomial1D()
  */
 Polynomial1D::~Polynomial1D() {}
 
-void Polynomial1D::setParameter(std::string name, std::string val, std::string units)
+void Polynomial1D::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -30,7 +30,7 @@ void Polynomial1D::setParameter(std::string name, std::string val, std::string u
   // Always call the underlying PM method:
   //------------------------------------------------------------
 
-  Model::setParameter(name, val, units);
+  Model::setParameter(name, val, units, external);
 
   if(name == "n") {
     unsigned n = getUintVal("n");

@@ -960,10 +960,11 @@ void VisDataSet::initializeAndCountDataMultiple()
     // encountered
     //------------------------------------------------------------
 
-    if(i==0)
+    if(i==0) {
       updateObservationInformation(dataset);
+    }
   }
-
+  
   //------------------------------------------------------------
   // Determine internal arrays from all baseline groups and
   // frequencies that were encountered
@@ -5560,7 +5561,7 @@ void VisDataSet::initializePositionDependentData()
   //------------------------------------------------------------
   // Set the position
   //------------------------------------------------------------
-  
+
   if(!ra_.hasValue_ && obs_.obsRa_.hasValue_)
     setRa(obs_.obsRa_);
 
@@ -6793,7 +6794,7 @@ void VisDataSet::mergeData(VisDataSet& vds, VisBaselineGroup& findGroup, VisStok
 /**.......................................................................
  * Set a parameter
  */
-void VisDataSet::setParameter(std::string name, std::string val, std::string units)
+void VisDataSet::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -6804,7 +6805,7 @@ void VisDataSet::setParameter(std::string name, std::string val, std::string uni
   if(name == "file") {
     fileList_.push_back(val);
     addDataSet(val);
-    return ParameterManager::setParameter(name, val, units);
+    return ParameterManager::setParameter(name, val, units, external);
   }
 
   //------------------------------------------------------------
@@ -6816,21 +6817,21 @@ void VisDataSet::setParameter(std::string name, std::string val, std::string uni
     String parName     = nameStr.remainder();
 
     DataSet* dataSet = getDataSet(dataSetName.str());
-    dataSet->setParameter(parName.str(), val, units);
+    dataSet->setParameter(parName.str(), val, units, external);
 
     //------------------------------------------------------------
     // Else call the underlaying DataSetManager setParameter method
     //------------------------------------------------------------
 
   } else {
-    DataSetManager::setParameter(name, val, units);
+      DataSetManager::setParameter(name, val, units, external);
   }
 }
 
 /**.......................................................................
  * Increment a parameter
  */
-void VisDataSet::incrementParameter(std::string name, std::string val, std::string units)
+void VisDataSet::incrementParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -6841,7 +6842,7 @@ void VisDataSet::incrementParameter(std::string name, std::string val, std::stri
   if(name == "file") {
     fileList_.push_back(val);
     addDataSet(val);
-    ParameterManager::incrementParameter(name, val, units);
+    ParameterManager::incrementParameter(name, val, units, external);
   }
 
   //------------------------------------------------------------
@@ -6853,14 +6854,14 @@ void VisDataSet::incrementParameter(std::string name, std::string val, std::stri
     String parName     = nameStr.remainder();
 
     DataSet* dataSet = getDataSet(dataSetName.str());
-    dataSet->incrementParameter(parName.str(), val, units);
+    dataSet->incrementParameter(parName.str(), val, units, external);
 
     //------------------------------------------------------------
     // Else increment our parameter
     //------------------------------------------------------------
 
   } else {
-    DataSetManager::incrementParameter(name, val, units);
+      DataSetManager::incrementParameter(name, val, units, external);
   }
 }
 

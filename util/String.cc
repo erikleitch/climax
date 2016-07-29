@@ -1098,13 +1098,9 @@ bool String::expandTildeIter()
 	ii2 = i;
       } else {
         
-        COUT("os(1) = '" << os.str() << "'");
-        
 	if(os.str() == "")
 	  os << getlogin();
 
-        COUT("os(2) = '" << os.str() << "'");
-        
 	expandAndReplace(os, i1, i2);
 	return true;
       }
@@ -1131,8 +1127,6 @@ void String::expandAndReplace(std::ostringstream& os, std::string::iterator& i1,
 {
   struct passwd* pw = getpwnam(os.str().c_str());
 
-  COUT("Getting pw struct for " << os.str() << " dir = '" << pw->pw_dir << "'");
-  
   if(!pw) 
     ThrowSysError("getpwnam");
   

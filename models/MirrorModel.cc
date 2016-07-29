@@ -53,7 +53,7 @@ MirrorModel::MirrorModel()
 MirrorModel::~MirrorModel() 
 {}
 
-void MirrorModel::setParameter(std::string name, std::string val, std::string units)
+void MirrorModel::setParameter(std::string name, std::string val, std::string units, bool external)
 {
   String nameStr(name);
 
@@ -61,7 +61,7 @@ void MirrorModel::setParameter(std::string name, std::string val, std::string un
   // Always call the underlying PM method:
   //------------------------------------------------------------
 
-  ParameterManager::setParameter(name, val, units);
+  ParameterManager::setParameter(name, val, units, external);
 
   if(name == "nr") {
     unsigned nr = getUintVal("nr");

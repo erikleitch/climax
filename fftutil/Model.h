@@ -614,7 +614,7 @@ namespace gcp {
       std::vector<Variate*> prerequisiteVariates_;
       void updatePrerequisites();
 
-      virtual void setParameter(std::string name, std::string val, std::string units=" ");
+      virtual void setParameter(std::string name, std::string val, std::string units=" ", bool external=true);
 
       ParameterManager general_;
 
