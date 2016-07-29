@@ -2566,6 +2566,8 @@ void VisDataSet::storeEstChisqAsWtScale()
  */
 void VisDataSet::initializeVisibilityArrays(double percentCorrelation)
 {
+  COUT("Calling initializeVisibilityArrays for this = " << this);
+  
   UvDataGridder* max = 0;
   
   Length diameter1, diameter2;
@@ -2632,6 +2634,8 @@ void VisDataSet::initializeVisibilityArrays(double percentCorrelation)
  */
 void VisDataSet::initializeVisibilityArrays2(double percentCorrelation)
 {
+  COUT("Calling initializeVisibilityArrays(2) for this = " << this);
+
   bool first = true;
   Angle maxRes;
   Angle maxSize;
@@ -3007,49 +3011,72 @@ void VisDataSet::computePrimaryBeamMultiThread(VisFreqData& vfd, Antenna& ant1, 
 {
   if(!pool_) {
 
-    //------------------------------------------------------------
-    // Compute the weighted sum of the primary beam over all shifted
-    // datasets
-    //------------------------------------------------------------
-
-    double wtSumTotal = 0;
-
+    bool computeBeamSum = false;
     for(unsigned i=0; i < vfd.wtSums_.size(); i++) {
-
-//      COUT(" size = " << vfd.wtSums_.size() << " iGroup = " << iGroup << " freq = " << vfd.frequency_.GHz() << " wt = " << vfd.wtSums_[i] << " pb has data " << vfd.primaryBeam_.hasData() << " xshift = " << vfd.xShifts_[i] << " yshift = " << vfd.yShifts_[i]);
-
-      if(!vfd.primaryBeam_.hasData()) {
-
-	if(vfd.wtSums_[i] > 0.0) {
-	  vfd.primaryBeam_  = ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
-	  vfd.primaryBeam_ *= ant2.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
-	  wtSumTotal = vfd.wtSums_[i];
-	}
-
-      } else {
-
-	Image pbPrev = vfd.primaryBeam_;
-	Image pbCurr;
-
-	double wtCurr = vfd.wtSums_[i];
-	double wtPrev = wtSumTotal;
-
-	pbCurr  = ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
-	pbCurr *= ant2.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
-
-	pbPrev *= wtPrev;
-	pbCurr *= wtCurr;
-
-	vfd.primaryBeam_ = (pbCurr + pbPrev) / (wtCurr + wtPrev);
-
-	wtSumTotal += wtCurr;
+      if(fabs(vfd.xShifts_[i].degrees()) > 0.0 || fabs(vfd.yShifts_[i].degrees()) > 0.0) {
+        computeBeamSum = true;
+        break;
       }
     }
 
-    if(debug_) {
-      PgUtil::setInteractive(true);
-      vfd.primaryBeam_.display();
-      COUT("wtSumtotal =  " << wtSumTotal << " cf " << vfd.wtSumTotal_ << std::endl);
+    //------------------------------------------------------------
+    // If any shift was non-zero, compute the fully-general primary
+    // beam sum
+    //------------------------------------------------------------
+    
+    if(computeBeamSum) {
+
+      //------------------------------------------------------------
+      // Compute the weighted sum of the primary beam over all shifted
+      // datasets
+      //------------------------------------------------------------
+      
+      double wtSumTotal = 0;
+
+      for(unsigned i=0; i < vfd.wtSums_.size(); i++) {
+        
+        // COUT(" size = " << vfd.wtSums_.size() << " iGroup = " << iGroup << " freq = " << vfd.frequency_.GHz() << " wt = " << vfd.wtSums_[i] << " pb has data " << vfd.primaryBeam_.hasData() << " xshift = " << vfd.xShifts_[i] << " yshift = " << vfd.yShifts_[i]);
+        
+        if(!vfd.primaryBeam_.hasData()) {
+          
+          if(vfd.wtSums_[i] > 0.0) {
+            vfd.primaryBeam_  = ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
+            vfd.primaryBeam_ *= ant2.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
+            wtSumTotal = vfd.wtSums_[i];
+          }
+
+        } else {
+          
+          Image pbPrev = vfd.primaryBeam_;
+          Image pbCurr;
+          
+          double wtCurr = vfd.wtSums_[i];
+          double wtPrev = wtSumTotal;
+          
+          pbCurr  = ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
+          pbCurr *= ant2.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_, vfd.xShifts_[i], vfd.yShifts_[i]);
+          
+          pbPrev *= wtPrev;
+          pbCurr *= wtCurr;
+          
+          vfd.primaryBeam_ = (pbCurr + pbPrev) / (wtCurr + wtPrev);
+          
+          wtSumTotal += wtCurr;
+        }
+      }
+
+      if(debug_) {
+        PgUtil::setInteractive(true);
+        vfd.primaryBeam_.display();
+        COUT("wtSumtotal =  " << wtSumTotal << " cf " << vfd.wtSumTotal_ << std::endl);
+      }
+
+      // If no data set was shifted, we don't have to compute the full
+      // beam sum, which can save us some time
+      
+    } else {
+      vfd.primaryBeam_  = ant1.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_);
+      vfd.primaryBeam_ *= ant2.getRealisticApertureField(vfd.primaryBeam_, vfd.frequency_);
     }
 
   } else {
@@ -3072,38 +3099,57 @@ EXECUTE_FN(VisDataSet::execComputePrimaryBeam)
   Antenna*     ant1 = ved->ant1_;
   Antenna*     ant2 = ved->ant2_;
 
+  bool computeBeamSum = false;
+  for(unsigned i=0; i < vfd->wtSums_.size(); i++) {
+    if(fabs(vfd->xShifts_[i].degrees()) > 0.0 || fabs(vfd->yShifts_[i].degrees()) > 0.0) {
+      computeBeamSum = true;
+      break;
+    }
+  }
+
   //------------------------------------------------------------
-  // Compute the weighted sum of the primary beam over all shifted
-  // datasets
+  // If any shift was non-zero, compute the fully-general primary
+  // beam sum
   //------------------------------------------------------------
   
-  double wtSumTotal = 0;
+  if(computeBeamSum) {
 
-  for(unsigned i=0; i < vfd->wtSums_.size(); i++) {
-    if(!vfd->primaryBeam_.hasData()) {
-      if(vfd->wtSums_[i] > 0.0) {
-        vfd->primaryBeam_  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-        vfd->primaryBeam_ *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-        wtSumTotal = vfd->wtSums_[i];
+    //------------------------------------------------------------
+    // Compute the weighted sum of the primary beam over all shifted
+    // datasets
+    //------------------------------------------------------------
+  
+    double wtSumTotal = 0;
+
+    for(unsigned i=0; i < vfd->wtSums_.size(); i++) {
+      if(!vfd->primaryBeam_.hasData()) {
+        if(vfd->wtSums_[i] > 0.0) {
+          vfd->primaryBeam_  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+          vfd->primaryBeam_ *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+          wtSumTotal = vfd->wtSums_[i];
+        }
+        
+      } else {
+        Image pbPrev = vfd->primaryBeam_;
+        Image pbCurr;
+        
+        double wtCurr = vfd->wtSums_[i];
+        double wtPrev = wtSumTotal;
+        
+        pbCurr  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+        pbCurr *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
+        
+        pbPrev *= wtPrev;
+        pbCurr *= wtCurr;
+        
+        vfd->primaryBeam_ = (pbCurr + pbPrev) / (wtCurr + wtPrev);
+        
+        wtSumTotal += wtCurr;
       }
-      
-    } else {
-      Image pbPrev = vfd->primaryBeam_;
-      Image pbCurr;
-      
-      double wtCurr = vfd->wtSums_[i];
-      double wtPrev = wtSumTotal;
-      
-      pbCurr  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-      pbCurr *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_, vfd->xShifts_[i], vfd->yShifts_[i]);
-      
-      pbPrev *= wtPrev;
-      pbCurr *= wtCurr;
-      
-      vfd->primaryBeam_ = (pbCurr + pbPrev) / (wtCurr + wtPrev);
-      
-      wtSumTotal += wtCurr;
     }
+  } else {
+    vfd->primaryBeam_  = ant1->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_);
+    vfd->primaryBeam_ *= ant2->getRealisticApertureField(vfd->primaryBeam_, vfd->frequency_);
   }
   
   vds->registerDone(ved->iGroup_, ved->iStokes_, ved->iFreq_);
@@ -5047,6 +5093,8 @@ void VisDataSet::VisFreqData::transformImage()
  */
 void VisDataSet::VisFreqData::resize(double percentCorrelation, double correlationLength, bool isSim)
 {
+  COUT("Initializing VisFreqData");
+
   // Find the power-of-2 size of the array that will grid the data _at
   // least_ this finely.  We divide by correlationLength/sqrt(2) since
   // the diagonal is the widest separation in UV we will tolerate.
