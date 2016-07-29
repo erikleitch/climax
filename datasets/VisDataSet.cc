@@ -2566,8 +2566,6 @@ void VisDataSet::storeEstChisqAsWtScale()
  */
 void VisDataSet::initializeVisibilityArrays(double percentCorrelation)
 {
-  COUT("Calling initializeVisibilityArrays for this = " << this);
-  
   UvDataGridder* max = 0;
   
   Length diameter1, diameter2;
@@ -2634,8 +2632,6 @@ void VisDataSet::initializeVisibilityArrays(double percentCorrelation)
  */
 void VisDataSet::initializeVisibilityArrays2(double percentCorrelation)
 {
-  COUT("Calling initializeVisibilityArrays(2) for this = " << this);
-
   bool first = true;
   Angle maxRes;
   Angle maxSize;
@@ -5093,8 +5089,6 @@ void VisDataSet::VisFreqData::transformImage()
  */
 void VisDataSet::VisFreqData::resize(double percentCorrelation, double correlationLength, bool isSim)
 {
-  COUT("Initializing VisFreqData");
-
   // Find the power-of-2 size of the array that will grid the data _at
   // least_ this finely.  We divide by correlationLength/sqrt(2) since
   // the diagonal is the widest separation in UV we will tolerate.
