@@ -500,8 +500,6 @@ bool String::toBool()
 {
   String str = toLower();
 
-  COUT("Omsode tonbool with str = " << str);
-
   if(str == "true") {
     return true;
   } else if(str == "false") {
