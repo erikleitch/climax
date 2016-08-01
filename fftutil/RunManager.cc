@@ -499,8 +499,8 @@ void RunManager::processFile(std::string fileName, bool preprocess)
       // Handle if directives
       //------------------------------------------------------------
 
-      if(line.contains("if") && line.contains("{")) {
-	String ifClause = line.findNextInstanceOf("(", true, ")", true, true);
+      if(line.contains("if(") && line.contains("{")) {
+        String ifClause = line.findNextInstanceOf("(", true, ")", true, true);
 	ifClause.strip(" ");
 	processNextTable.push(ifClause.toBool());
 
@@ -523,7 +523,6 @@ void RunManager::processFile(std::string fileName, bool preprocess)
       //------------------------------------------------------------
 
       if(line.contains("}") && line.contains("else") && line.contains("{")) {
-
 	if(processNextTable.size() > 1) {
 	  String lineTest = line.findNextInstanceOf("{", true, " ", false, true);
 	  String rem = line.remainder();
@@ -553,7 +552,7 @@ void RunManager::processFile(std::string fileName, bool preprocess)
       // Handle if/else terminations
       //------------------------------------------------------------
 
-      if(processNextTable.size() > 1 && line.contains("}")) {
+      if(processNextTable.size() > 1 && line.contains("}") && !line.contains("${")) {
 	String lineTest = line.findNextInstanceOf(" ", false, "}", true, true);
 	processNextTable.pop();
 
@@ -590,7 +589,7 @@ void RunManager::processFile(std::string fileName, bool preprocess)
 			 COLORIZE(xtm, "green", std::endl << std::endl << "All valid directives should end in ';'"
 				  << std::endl << std::endl << "(Comments can be inserted in a runfile by prepending '//' to the line)"));
       }
-      
+
       line = line.findNextInstanceOf("", false, ";", true, true);
       line.advanceToNextNonWhitespaceChar();
       
@@ -621,7 +620,7 @@ void RunManager::processFile(std::string fileName, bool preprocess)
     fin.close();
     ThrowSimpleError(err.what());
   }
-  
+
   fin.close();
 }
 
@@ -1058,7 +1057,7 @@ void RunManager::preProcessLine(String& line)
     //------------------------------------------------------------
 
   } else if(line.contains("=")) {
-    
+
     String tok, val;
     getTokVal(line, tok, val);
     
@@ -1074,7 +1073,7 @@ void RunManager::preProcessLine(String& line)
 
     } else if(tok.contains("modelcpus")) {
       val.strip(' ');
-      
+
       RangeParser parser;
       std::ostringstream os;
       String cpuStr(val);
@@ -1430,9 +1429,11 @@ void RunManager::getTokVal(String& line, String& tok, String& val)
   if(val.isEmpty())
     ThrowError("Empty value");
 
-  // Expand any shell ~ directives before returning
+  // Expand any shell ~ and environment variable directives before
+  // returning
 
   val.expandTilde();
+  val.expandVar();
 
   // And strip out any whitespace
 
@@ -1923,7 +1924,6 @@ void RunManager::parseDataSetVariableAssignment(DataSet* dataSet, String& varNam
   //------------------------------------------------------------
 
   if(varName == "ra" && valStr.contains(":")) {
-    COUT("Inside RM with dataSet = " << dataSet->name_);
     dataSet->setParameter(varName.str(), valStr.str());
     return;
   } else if(varName == "dec" && valStr.contains(":")) {

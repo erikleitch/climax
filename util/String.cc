@@ -500,6 +500,8 @@ bool String::toBool()
 {
   String str = toLower();
 
+  COUT("Omsode tonbool with str = " << str);
+
   if(str == "true") {
     return true;
   } else if(str == "false") {
@@ -1189,7 +1191,7 @@ void String::expandAndReplaceVar(std::ostringstream& os, std::string::iterator& 
   char* envVal = getenv(os.str().c_str());
 
   if(!envVal) 
-      ThrowError("Environment variable: " << os.str() << " is not defined");
+      ThrowSimpleError("Environment variable: " << os.str() << " is not defined");
   
   std::string expanded(envVal);
 
