@@ -156,6 +156,12 @@ namespace gcp {
 			    std::string::iterator& i1, 
 			    std::string::iterator& i2);
 
+      void expandVar();
+      bool expandVarIter();
+      void expandAndReplaceVar(std::ostringstream& os, 
+                               std::string::iterator& i1, 
+                               std::string::iterator& i2);
+
       static std::string formatHumanReadableInteger(unsigned val);
 
       static std::string numericalSuffix(int i);

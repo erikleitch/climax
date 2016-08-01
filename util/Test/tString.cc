@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <errno.h>
+#include <unistd.h>
 
 #include "gcp/program/Program.h"
 
@@ -26,6 +27,14 @@ void Program::initializeUsage() {};
 
 int Program::main()
 {
+  String var("my home directory is ${HOME} and my climax tools dir = ${CLIMAX_TOOLS}/${EMLTEST}");
+
+  var.expandVar();
+
+  COUT("var is now: " << var);
+
+  return 0;
+  
   String uname("~/this/is/a/test/~eml");
 
   uname.expandTilde();

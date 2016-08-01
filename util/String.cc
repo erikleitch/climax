@@ -1065,6 +1065,55 @@ bool String::isNumeric(char c)
   return isdigit(c) || c=='.' || c=='e' || c=='+' || c=='-';
 }
 
+void String::expandVar()
+{
+  bool found = false;
+
+  do {
+    found = expandVarIter();
+  } while(found);
+}
+
+bool String::expandVarIter()
+{
+  std::string::iterator i1=str_.end();
+  std::string::iterator i2=str_.end();
+
+  std::ostringstream os;
+
+  // Search through the entire string for occurences of ~username
+
+  unsigned ii1=0, ii2=0, i=0;
+  bool start=false, reading=false;
+
+  for(std::string::iterator iter=str_.begin(); iter != str_.end(); iter++, i++) {
+
+    if(*iter == '$') {
+      i1 = iter;
+      i2 = iter;
+      ii1 = i;
+      start=true;
+    } else if(start && *iter == '{') {
+        reading = true;
+        start = false;
+    } else if(reading && i1 != str_.end()) {
+      
+        if(*iter != '}') {
+            i2 = iter;
+            os << *iter;
+            ii2 = i;
+        } else {
+            i2 = iter;
+            reading = false;
+            expandAndReplaceVar(os, i1, i2);
+            return true;
+        }
+    }
+  }
+
+  return false;
+}
+
 void String::expandTilde()
 {
   bool found = false;
@@ -1131,6 +1180,18 @@ void String::expandAndReplace(std::ostringstream& os, std::string::iterator& i1,
     ThrowSysError("getpwnam");
   
   std::string expanded(pw->pw_dir);
+
+  str_.replace(i1, i2+1, expanded);
+}
+
+void String::expandAndReplaceVar(std::ostringstream& os, std::string::iterator& i1, std::string::iterator& i2) 
+{
+  char* envVal = getenv(os.str().c_str());
+
+  if(!envVal) 
+      ThrowError("Environment variable: " << os.str() << " is not defined");
+  
+  std::string expanded(envVal);
 
   str_.replace(i1, i2+1, expanded);
 }
