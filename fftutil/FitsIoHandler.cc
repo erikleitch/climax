@@ -6,6 +6,7 @@
 #include <string.h>
 
 using namespace gcp::util;
+using namespace std;
 
 FitsIoHandler::FitsAxisCard FitsIoHandler::fitsAxes_[] = {
   {"RA" ,     "\\gh (\\(0718))", AX_DEG},
